@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1788299643399,
+      "tag": "0000_blushing_kitty_pryde",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788299722853,
+      "tag": "0001_reflective_leper_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788362288180,
+      "tag": "0002_elite_overlord",
+      "breakpoints": true
+    }
+  ]
+}
