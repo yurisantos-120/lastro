@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   BookOpenText, Boxes, Building2, Camera, ChevronRight, CircleUserRound,
-  LayoutDashboard, MapPin, Moon, Network, Plus, Search, Settings2, Sun, Tag,
+  LayoutDashboard, MapPin, Menu, Moon, Network, Plus, Search, Settings2, Sun, Tag,
+  type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,6 +44,8 @@ export default function Home() {
   const [selected, setSelected] = useState<RecordItem | null>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [storageError, setStorageError] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [searchExpanded, setSearchExpanded] = useState(false);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem('noc-megalink-theme');
@@ -148,34 +151,83 @@ export default function Home() {
     ['inicio', 'Visão geral', LayoutDashboard], ['pesquisa', 'Pesquisa', Search], ['informacoes', 'Informações', BookOpenText],
     ['vlans', 'VLANs', Network], ['cameras', 'Câmeras', Camera], ['pontos', 'Pontos', MapPin], ['categorias', 'Categorias', Boxes],
   ] as const;
+  const stats: Array<[string, number, LucideIcon, string, ActiveView]> = [
+    ['VLANs', records.filter((r) => r.kind === 'vlan').length, Network, '#ff6b2c', 'vlans'],
+    ['Câmeras', records.filter((r) => r.kind === 'camera').length, Camera, '#4f7cff', 'cameras'],
+    ['Pontos', records.filter((r) => r.kind === 'point').length, MapPin, '#20a57a', 'pontos'],
+    ['Categorias', categories.length, Tag, '#8b5cf6', 'categorias'],
+  ];
   const title: Record<ActiveView, string> = { inicio: 'Visão geral', pesquisa: 'Pesquisa', informacoes: 'Informações gerais', vlans: 'VLANs', cameras: 'Câmeras', pontos: 'Pontos atendidos', categorias: 'Categorias' };
 
   return <main className="min-h-screen bg-[#f4f6f8] pb-24 text-[#17202a] lg:pb-0">
-    <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col bg-[#0b1625] px-4 py-5 text-white lg:flex">
-      <div className="flex items-center gap-3 px-2 pb-7"><div className="grid size-10 place-items-center rounded-xl bg-[#ff6b2c]"><Network className="size-5" /></div><div><p className="text-[10px] font-semibold uppercase tracking-[.22em] text-slate-400">Eidos</p><p className="text-lg font-semibold">NOC Megalink</p></div></div>
-      <nav className="space-y-1">{nav.map(([id, label, Icon]) => <button key={id} onClick={() => setActive(id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${active === id ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><Icon className={`size-4 ${active === id ? 'text-[#ff7b43]' : ''}`} />{label}</button>)}</nav>
-      <div className="mt-auto rounded-2xl border border-white/10 bg-white/[.04] p-3"><div className="mb-2 flex items-center gap-2"><Settings2 className="size-4 text-[#ff7b43]" /><span className="text-xs font-semibold">Base operacional</span></div><p className="text-xs leading-relaxed text-slate-400">VLANs, câmeras, pontos e informações organizadas por categoria.</p></div>
-      <div className="mt-4 flex items-center gap-3 border-t border-white/10 px-1 pt-4"><CircleUserRound className="size-8 text-slate-400" /><div><p className="text-xs font-medium">Equipe NOC</p><p className="text-[11px] text-emerald-400">● Operação ativa</p></div></div>
+    <aside className={`noc-sidebar fixed inset-y-0 left-0 z-20 flex flex-col overflow-hidden border-r px-3 py-4 text-white transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-[72px]'}`}>
+      <div className="mb-5 flex items-center gap-3 px-1">
+        <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#ff6b2c]"><Network className="size-5" /></div>
+        {sidebarOpen && <div className="min-w-0 flex-1"><p className="text-[10px] font-semibold uppercase tracking-[.22em] text-slate-300">Eidos</p><p className="truncate text-lg font-semibold text-white">NOC Megalink</p></div>}
+      </div>
+
+      {sidebarOpen ? (
+        <div className="noc-team-card mb-5 flex items-center gap-3 rounded-2xl border px-3 py-2.5">
+          <CircleUserRound className="size-8 text-slate-200" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-slate-100">Equipe NOC</p>
+            <p className="mt-0.5 text-[11px] text-emerald-400">● Operação ativa</p>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-5 flex justify-center">
+          <div className="relative grid size-10 place-items-center rounded-xl border border-slate-600 bg-slate-800/80 text-slate-100" aria-label="Equipe NOC">
+            <CircleUserRound className="size-5 text-slate-200" />
+            <span className="absolute -right-1 -top-1 block size-2.5 rounded-full bg-emerald-500" aria-label="Operação ativa" />
+          </div>
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-col gap-2">
+        <Button type="button" onClick={() => setSidebarOpen((value) => !value)} variant={sidebarOpen ? 'default' : 'outline'} className={`h-11 w-full ${sidebarOpen ? 'justify-start bg-slate-800/80 px-3 text-slate-100 hover:bg-slate-700' : 'mx-auto w-11 justify-center rounded-xl border border-slate-600 bg-slate-800/80 px-0 text-slate-100 hover:bg-slate-700'}`} aria-label={sidebarOpen ? 'Recolher barra lateral' : 'Expandir barra lateral'}>
+          <Menu className="size-4" />
+          {sidebarOpen && <span className="ml-2">Menu</span>}
+        </Button>
+
+        <Button onClick={startNewRecord} className={`h-11 w-full ${sidebarOpen ? 'justify-start bg-[#ff6b2c] px-3 text-white hover:bg-[#e85b20]' : 'mx-auto w-11 justify-center rounded-xl bg-[#ff6b2c] px-0 text-white hover:bg-[#e85b20]'}`} aria-label="Novo cadastro">
+          <Plus className="size-4" />
+          {sidebarOpen && <span className="ml-2">Novo cadastro</span>}
+        </Button>
+      </div>
+
+      <nav className="flex-1 space-y-1 overflow-hidden">
+        {nav.map(([id, label, Icon]) => <button key={id} onClick={() => setActive(id)} className={`noc-nav-button flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${active === id ? 'noc-nav-button--active' : 'text-slate-300'} ${!sidebarOpen && 'justify-center px-2'}`}><Icon className={`size-4 ${active === id ? 'text-[#ff9d6c]' : 'text-slate-300'}`} />{sidebarOpen && label}</button>)}
+      </nav>
+
+      {sidebarOpen && <div className="noc-base-card mt-auto rounded-2xl border p-3">
+        <div className="mb-2 flex items-center gap-2"><Settings2 className="size-4 text-[#ff9d6c]" /><span className="text-xs font-semibold text-slate-100">Base operacional</span></div>
+        <p className="text-xs leading-relaxed text-slate-300">VLANs, câmeras, pontos e informações organizadas por categoria.</p>
+      </div>}
+
+      <div className={`mt-4 ${sidebarOpen ? 'px-1' : 'flex justify-center'}`}>
+        <Button onClick={toggleTheme} variant={sidebarOpen ? 'outline' : 'ghost'} className={`noc-theme-button ${sidebarOpen ? 'w-full justify-start' : 'h-10 w-10 justify-center rounded-xl border border-slate-600 bg-slate-800/80 text-slate-100 hover:bg-slate-700'} `} aria-label={darkMode ? 'Ativar modo claro' : 'Ativar modo escuro'}>
+          {darkMode ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          {sidebarOpen && <span className="ml-2">Tema</span>}
+        </Button>
+      </div>
     </aside>
 
-    <section className="lg:pl-64">
-      <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-2 border-b border-slate-200/80 bg-white/90 px-3 backdrop-blur sm:px-5 lg:px-8">
-        <button onClick={() => setActive('inicio')} className="flex min-w-0 items-center gap-2 lg:hidden"><Network className="size-5 shrink-0 text-[#ff6b2c]" /><b className="hidden truncate min-[380px]:block">NOC Megalink</b></button>
-        <div className="relative hidden w-full max-w-lg sm:block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(event) => { setQuery(event.target.value); if (event.target.value) setActive('pesquisa'); }} placeholder="Pesquisar em todos os cadastros..." className="h-10 border-0 bg-slate-100 pl-10" /></div>
-        <div className="flex shrink-0 items-center gap-2"><Button onClick={toggleTheme} variant="outline" size="icon-lg" aria-label={darkMode ? 'Ativar modo claro' : 'Ativar modo escuro'}>{darkMode ? <Sun /> : <Moon />}</Button><Button onClick={startNewRecord} className="h-9 bg-[#ff6b2c] px-3 text-white hover:bg-[#e85b20] sm:px-4"><Plus /><span className="hidden sm:inline">Novo cadastro</span><span className="sm:hidden">Novo</span></Button></div>
-      </header>
+    <div className={`fixed left-4 top-4 z-30 transition-all duration-300 ${sidebarOpen ? 'lg:left-[17.25rem]' : 'lg:left-[5.1rem]'}`}>
+      <div className={`noc-search relative flex h-11 items-center overflow-hidden rounded-2xl transition-all duration-300 ${searchExpanded || query ? 'w-[min(72vw,360px)]' : 'w-11'}`}>
+        <button type="button" onClick={() => setSearchExpanded((value) => !value)} className="z-10 grid size-11 shrink-0 place-items-center rounded-2xl text-slate-500 transition hover:bg-slate-200" aria-label="Pesquisar">
+          <Search className="size-4" />
+        </button>
+        <Input value={query} onFocus={() => setSearchExpanded(true)} onBlur={() => { if (!query) setSearchExpanded(false); }} onChange={(event) => { const nextValue = event.target.value; setQuery(nextValue); if (nextValue) { setActive('pesquisa'); setSearchExpanded(true); } else { setSearchExpanded(false); } }} placeholder="Pesquisar..." className={`h-full border-0 bg-transparent pl-1 pr-3 text-sm text-slate-700 outline-none ring-0 transition-all duration-300 ${searchExpanded || query ? 'visible w-full opacity-100' : 'invisible w-0 opacity-0'}`} />
+      </div>
+    </div>
 
+    <section className={`transition-all duration-300 pt-20 ${sidebarOpen ? 'lg:pl-64' : 'lg:pl-[72px]'}`}>
       <div className="mx-auto max-w-[1440px] p-4 sm:p-5 lg:p-8">
         {storageError && <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{storageError}</div>}
-        <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div className="min-w-0"><p className="mb-1 text-[11px] font-semibold uppercase tracking-[.14em] text-[#ef6427] sm:text-xs sm:tracking-[.16em]">Central de conhecimento</p><h1 className="text-2xl font-semibold sm:text-3xl">{title[active]}</h1><p className="mt-1 text-sm text-slate-500">Organize os dados por categoria e encontre rapidamente o que precisa.</p></div>{active === 'categorias' && <Button onClick={() => setShowCategoryForm(true)} variant="outline"><Plus />Criar categoria</Button>}</div>
+        <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div className="min-w-0"><p className="mb-1 text-[11px] font-semibold uppercase tracking-[.14em] text-[#ef6427] sm:text-xs sm:tracking-[.16em]">Central de conhecimento</p><h1 className="text-2xl font-semibold sm:text-3xl">{title[active]}</h1><p className="mt-1 text-sm text-slate-600">Organize os dados por categoria e encontre rapidamente o que precisa.</p></div>{active === 'categorias' && <Button onClick={() => setShowCategoryForm(true)} variant="outline"><Plus />Criar categoria</Button>}</div>
 
         {active === 'inicio' && <>
-          <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[
-            ['VLANs', records.filter((r) => r.kind === 'vlan').length, Network, '#ff6b2c', 'vlans'],
-            ['Câmeras', records.filter((r) => r.kind === 'camera').length, Camera, '#4f7cff', 'cameras'],
-            ['Pontos', records.filter((r) => r.kind === 'point').length, MapPin, '#20a57a', 'pontos'],
-            ['Categorias', categories.length, Tag, '#8b5cf6', 'categorias'],
-          ].map(([label, count, Icon, color, view]) => <button key={String(label)} onClick={() => setActive(view as ActiveView)} className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-[0_8px_30px_rgba(15,23,42,.04)] transition hover:-translate-y-0.5"><div className="mb-5 flex items-center justify-between"><span className="text-sm text-slate-500">{String(label)}</span><span className="grid size-9 place-items-center rounded-xl" style={{ backgroundColor: `${String(color)}18`, color: String(color) }}><Icon className="size-4" /></span></div><strong className="text-3xl">{Number(count)}</strong></button>)}</div>
+          <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{stats.map(([label, count, Icon, color, view]) => <button key={String(label)} onClick={() => setActive(view)} className="noc-stat-card rounded-2xl p-5 text-left transition hover:-translate-y-0.5"><div className="mb-5 flex items-center justify-between"><span className="text-sm font-medium text-slate-600">{String(label)}</span><span className="grid size-9 place-items-center rounded-xl" style={{ backgroundColor: `${String(color)}18`, color: String(color) }}><Icon className="size-4" /></span></div><strong className="text-3xl font-semibold">{Number(count)}</strong></button>)}</div>
           <RecordList title="Atualizações recentes" items={records.slice(0, 8)} categories={categories} onSelect={setSelected} />
         </>}
 

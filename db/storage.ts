@@ -18,8 +18,18 @@ function database() {
   return env.DB;
 }
 
+async function ensureSchema(db: D1Database) {
+  await db.batch([
+    db.prepare('CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL, color TEXT NOT NULL, scope TEXT NOT NULL DEFAULT \'general\', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)'),
+    db.prepare('CREATE TABLE IF NOT EXISTS information (id INTEGER PRIMARY KEY NOT NULL, title TEXT NOT NULL, category_id INTEGER NOT NULL, responsible TEXT NOT NULL, validation TEXT NOT NULL, contact TEXT NOT NULL, notes TEXT NOT NULL, kind TEXT NOT NULL DEFAULT \'general\', details_json TEXT NOT NULL DEFAULT \'{}\', updated_at TEXT NOT NULL, FOREIGN KEY (category_id) REFERENCES categories(id))'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_information_category_id ON information (category_id)'),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_information_title ON information (title)'),
+  ]);
+}
+
 export async function ensureDatabase() {
   const db = database();
+  await ensureSchema(db);
   const count = await db.prepare('SELECT COUNT(*) AS total FROM categories').first<{ total: number }>();
   if (!count?.total) {
     const now = new Date().toISOString();

@@ -53,38 +53,38 @@ body {
 }
 
 :root {
-  --background: #f4f6f8;
-  --foreground: #17202a;
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --background: #edf3f8;
+  --foreground: #17212b;
+  --card: #ffffff;
+  --card-foreground: #1b2938;
+  --popover: #ffffff;
+  --popover-foreground: #1b2938;
   --primary: #0b1625;
   --primary-foreground: #ffffff;
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --secondary: #eef3f8;
+  --secondary-foreground: #192633;
+  --muted: #f3f6fa;
+  --muted-foreground: #526579;
+  --accent: #f5f7fb;
+  --accent-foreground: #1e2d3a;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  --border: #dce5ee;
+  --input: #edf3f8;
   --ring: #ff6b2c;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --chart-1: #ff6b2c;
+  --chart-2: #4f7cff;
+  --chart-3: #20a57a;
+  --chart-4: #8b5cf6;
+  --chart-5: #0f172a;
   --radius: 0.75rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #0a1729;
+  --sidebar-foreground: #edf5ff;
+  --sidebar-primary: #ff6b2c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #13263d;
+  --sidebar-accent-foreground: #edf5ff;
+  --sidebar-border: rgba(148, 163, 184, 0.28);
+  --sidebar-ring: #ff9f6a;
 }
 
 .dark {
@@ -170,6 +170,196 @@ html.dark select {
 
 html.dark button:hover { background-color: #1a2a3d; }
 html.dark button.bg-\[\#ff6b2c\]:hover { background-color: #e85b20 !important; }
+
+.noc-sidebar {
+  background: linear-gradient(180deg, #0b1728 0%, #0d1a2e 100%);
+  border-color: rgba(148, 163, 184, 0.26);
+  box-shadow: inset -1px 0 0 rgba(255,255,255,0.03);
+}
+
+.noc-sidebar .noc-team-card,
+.noc-sidebar .noc-base-card,
+.noc-sidebar .noc-theme-button,
+.noc-sidebar .noc-action-group {
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+.noc-sidebar .noc-team-card {
+  background: rgba(15, 28, 42, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+}
+
+.noc-sidebar .noc-action-group {
+  background: rgba(15, 28, 42, 0.82);
+}
+
+.noc-sidebar .noc-nav-button {
+  color: #d9e3f0;
+  border: 1px solid transparent;
+  transition: all 180ms ease;
+}
+
+.noc-sidebar .noc-nav-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f8fbff;
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.noc-sidebar .noc-nav-button--active {
+  background: rgba(255, 107, 44, 0.15);
+  color: #ffffff;
+  border-color: rgba(255, 139, 84, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(255, 139, 84, 0.16);
+}
+
+.noc-sidebar .noc-nav-button--active svg {
+  color: #ff9d6c;
+}
+
+.noc-sidebar .noc-base-card {
+  background: rgba(15, 28, 42, 0.82);
+}
+
+.noc-sidebar .noc-theme-button {
+  background: linear-gradient(180deg, rgba(18, 32, 46, 0.96), rgba(12, 22, 33, 0.96));
+  color: #edf5ff;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.noc-sidebar .noc-theme-button:hover {
+  background: linear-gradient(180deg, #172b3e, #111f2e);
+  border-color: rgba(255, 153, 94, 0.35);
+}
+
+.noc-sidebar .noc-theme-button:focus-visible,
+.noc-sidebar .noc-nav-button:focus-visible,
+.noc-sidebar .noc-action-button:focus-visible,
+.noc-search:focus-within,
+.noc-stat-card:focus-visible,
+.noc-list-row:focus-visible {
+  outline: 2px solid rgba(255, 139, 84, 0.9);
+  outline-offset: 2px;
+}
+
+.noc-search {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.noc-search:focus-within {
+  border-color: rgba(255, 120, 53, 0.72);
+  box-shadow: 0 0 0 4px rgba(255, 107, 44, 0.09), 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.noc-search .text-slate-700,
+.noc-search input,
+.noc-search textarea,
+.noc-search select {
+  color: #1f2e3d !important;
+}
+
+.noc-search input::placeholder {
+  color: #75859b;
+}
+
+.noc-stat-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #dfe7f0;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.noc-stat-card:hover {
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.07);
+  border-color: #d6dfeb;
+}
+
+.noc-stat-card strong {
+  color: #101827;
+}
+
+.noc-list-panel {
+  background: rgba(255,255,255,0.96);
+  border: 1px solid #dde6ef;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.03);
+}
+
+.noc-list-row {
+  border-top: 1px solid #edf2f7;
+  background: rgba(255,255,255,0.96);
+}
+
+.noc-list-row:hover {
+  background: #f8fafc;
+}
+
+.noc-list-row b,
+.noc-list-panel h2,
+.noc-panel-card h2,
+main h1,
+main h3 {
+  color: #182334;
+}
+
+.noc-list-panel .text-slate-500,
+.noc-list-panel .text-slate-400,
+.noc-panel-card .text-slate-500,
+.noc-panel-card .text-slate-400,
+#root p,
+main p,
+main span,
+main div {
+  color: inherit;
+}
+
+.noc-panel-card {
+  background: rgba(255,255,255,0.96);
+  border: 1px solid #dfe7f0;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+}
+
+.noc-panel-card .text-slate-500,
+.noc-panel-card .text-slate-400,
+.noc-panel-card p,
+.noc-panel-card span,
+.noc-panel-card div {
+  color: #53657a;
+}
+
+html.dark .noc-search {
+  background: rgba(15, 24, 35, 0.92);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+html.dark .noc-search input,
+html.dark .noc-search .text-slate-700 {
+  color: #edf5ff !important;
+}
+
+html.dark .noc-stat-card,
+html.dark .noc-list-panel,
+html.dark .noc-panel-card {
+  background: rgba(17, 29, 44, 0.96);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+html.dark .noc-stat-card strong,
+html.dark .noc-list-panel h2,
+html.dark .noc-panel-card h2,
+html.dark main h1,
+html.dark main h3 {
+  color: #ecf4ff;
+}
+
+html.dark .noc-list-row {
+  border-top-color: rgba(148, 163, 184, 0.16);
+  background: rgba(17, 29, 44, 0.96);
+}
+
+html.dark .noc-list-row:hover {
+  background: rgba(22, 37, 53, 0.96);
+}
 
 .mobile-nav {
   padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
