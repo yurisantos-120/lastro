@@ -1,5 +1,15 @@
+import { createDataHandlers } from './handlers';
 import { createCategory, createRecord, readAll, updateCategory, updateRecord } from '@/db/storage';
+import { getAuthService } from '@/services/auth/auth-runtime';
+import { withRequiredRole } from '@/services/auth/api-access';
 
-export async function GET() { try { return Response.json(await readAll()); } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Falha ao carregar dados.' }, { status: 500 }); } }
-export async function POST(request: Request) { try { const body = await request.json() as Record<string, unknown>; if (body.kind === 'category') await createCategory(body); else if (body.kind === 'record') await createRecord(body); else return Response.json({ error: 'Tipo de cadastro inválido.' }, { status: 400 }); return Response.json(await readAll(), { status: 201 }); } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Falha ao salvar.' }, { status: 500 }); } }
-export async function PUT(request: Request) { try { const body = await request.json() as Record<string, unknown>; if (body.kind === 'category') await updateCategory(body); else if (body.kind === 'record') await updateRecord(body); else return Response.json({ error: 'Tipo de alteração inválido.' }, { status: 400 }); return Response.json(await readAll()); } catch (error) { return Response.json({ error: error instanceof Error ? error.message : 'Falha ao atualizar.' }, { status: 500 }); } }
+const handlers = createDataHandlers({ readAll, createCategory, createRecord, updateCategory, updateRecord });
+
+const resolveCurrentUser = (token: string | null) => getAuthService().currentUser(token);
+
+export const GET = (request: Request) =>
+  withRequiredRole(request, 'viewer', resolveCurrentUser, () => handlers.GET());
+export const POST = (request: Request) =>
+  withRequiredRole(request, 'operator', resolveCurrentUser, () => handlers.POST(request));
+export const PUT = (request: Request) =>
+  withRequiredRole(request, 'operator', resolveCurrentUser, () => handlers.PUT(request));

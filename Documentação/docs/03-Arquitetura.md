@@ -77,7 +77,23 @@ vite.config.ts             Vinext, Sites e ambiente local Cloudflare
 
 O processo é igual ao cadastro, mas utiliza `PUT /api/data` e um identificador existente. A relação entre informação e categoria é preservada pelo campo `category_id`. O campo `kind` identifica se o cadastro é geral, VLAN, câmera ou ponto. Os campos próprios de cada módulo são serializados em `details_json`, mantendo um esquema comum sem misturar os formulários na interface.
 
+## Rotas (compatibilidade temporária)
+
+A seção antes chamada Informações agora aparece como **Rotas**, incluindo navegação móvel, listagem, cadastro e detalhes. A identificação permanece `kind === 'general'`; o estado interno `informacoes`, as categorias `scope: 'general'`, a tabela `information` e os contratos da API foram preservados. A tela exclui VLANs, câmeras e pontos; a Pesquisa continua abrangendo todos os módulos.
+
+Não há marcador independente que diferencie procedimentos de rotas dentro de `general`. Nesta fase todos os registros desse tipo são tratados como rotas, conforme o uso operacional atual. Categorias livres e nomes dos registros não são usados como heurística. Se existirem registros genéricos que não sejam rotas, será necessário classificá-los explicitamente em uma próxima etapa.
+
+Evolução recomendada: inventariar e classificar o legado, definir uma entidade Route com vínculo aos IDs atuais e preparar uma migração aditiva com compatibilidade de leitura/edição. Não foi criada migração nesta etapa.
+
 ## Estado local versus persistente
+
+### Área de Chamados
+
+O item **Chamados** usa o mesmo estado de navegação `ActiveView` da página principal e aparece na sidebar e na navegação móvel. O conteúdo fica em `components/tickets-section.tsx`, com três estados locais: resumo, abertura e modelos. Os botões levam a telas preparatórias com retorno para Chamados; ainda não enviam solicitações nem criam modelos.
+
+Não há fonte de histórico persistido nesta etapa. “Últimos chamados” apresenta estado vazio e esclarece que tickets criados pelo teste GLPI não são registrados ali. O painel de teste permanece separado na Visão geral. Não houve alterações em banco, API ou autenticação. Ao sair da seção, a navegação interna volta ao resumo; não há novas URLs.
+
+Próximo passo: implementar a abertura com validação/prévia, reutilizando a API interna GLPI; definir a persistência do vínculo e tratamento de resultados incertos antes de preencher o histórico local.
 
 - O React mantém uma cópia temporária para renderizar a tela.
 - A fonte permanente de categorias e informações é o D1.

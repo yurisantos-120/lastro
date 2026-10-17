@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "NOC Megalink: iniciar desenvolvimento",
+      "label": "Lastro: iniciar desenvolvimento",
       "type": "shell",
       "command": "pnpm dev",
       "options": {
@@ -30,7 +30,7 @@
       }
     },
     {
-      "label": "NOC Megalink: validar build",
+      "label": "Lastro: validar build",
       "type": "shell",
       "command": "pnpm build",
       "options": {

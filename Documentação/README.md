@@ -1,4 +1,4 @@
-# Documentação — NOC Megalink
+# Documentação — Lastro
 
 Este diretório contém o manual técnico e operacional do sistema desenvolvido pela Eidos.
 
@@ -12,6 +12,9 @@ Este diretório contém o manual técnico e operacional do sistema desenvolvido 
 6. [Operação e publicação](docs/06-Operacao-e-Publicacao.md)
 7. [Lições aprendidas](docs/07-Licoes-Aprendidas.md)
 8. [Glossário](docs/08-Glossario.md)
+9. [Integração inicial GLPI](docs/09-Integracao-GLPI.md)
+10. [Chamados e integração GLPI](docs/10-Chamados-e-Integracao-GLPI.md)
+11. [Autenticação backend GLPI](docs/11-Autenticacao-Backend.md)
 
 ## Resumo para começar
 
@@ -22,4 +25,4 @@ pnpm install
 pnpm dev
 ```
 
-Depois, acesse `http://localhost:3000`. Também é possível executar a tarefa **NOC Megalink: iniciar desenvolvimento** pelo menu **Terminal > Run Task**.
+Depois, acesse `http://localhost:3000`. Também é possível executar a tarefa **Lastro: iniciar desenvolvimento** pelo menu **Terminal > Run Task**.

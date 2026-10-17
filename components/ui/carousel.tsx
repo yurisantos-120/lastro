@@ -58,14 +58,21 @@ function Carousel({
     },
     plugins,
   );
-  const [canScrollPrev, setCanScrollPrev] = React.useState(false);
-  const [canScrollNext, setCanScrollNext] = React.useState(false);
-
-  const onSelect = React.useCallback((api: CarouselApi) => {
-    if (!api) return;
-    setCanScrollPrev(api.canScrollPrev());
-    setCanScrollNext(api.canScrollNext());
-  }, []);
+  const subscribe = React.useCallback((notify: () => void) => {
+    api?.on('reInit', notify);
+    api?.on('select', notify);
+    return () => {
+      api?.off('reInit', notify);
+      api?.off('select', notify);
+    };
+  }, [api]);
+  const getScrollState = React.useCallback(
+    () => (api?.canScrollPrev() ? 1 : 0) | (api?.canScrollNext() ? 2 : 0),
+    [api],
+  );
+  const scrollState = React.useSyncExternalStore(subscribe, getScrollState, () => 0);
+  const canScrollPrev = (scrollState & 1) !== 0;
+  const canScrollNext = (scrollState & 2) !== 0;
 
   const scrollPrev = React.useCallback(() => {
     api?.scrollPrev();
@@ -93,17 +100,6 @@ function Carousel({
     setApi(api);
   }, [api, setApi]);
 
-  React.useEffect(() => {
-    if (!api) return;
-    onSelect(api);
-    api.on('reInit', onSelect);
-    api.on('select', onSelect);
-
-    return () => {
-      api?.off('select', onSelect);
-    };
-  }, [api, onSelect]);
-
   return (
     <CarouselContext.Provider
       value={{
@@ -121,6 +117,8 @@ function Carousel({
       <div
         onKeyDownCapture={handleKeyDown}
         className={cn('relative', className)}
+        // Preserve the div ref and keyboard-event contract exposed to consumers.
+        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
         role="region"
         aria-roledescription="carousel"
         data-slot="carousel"
@@ -158,6 +156,8 @@ function CarouselItem({ className, ...props }: React.ComponentProps<'div'>) {
 
   return (
     <div
+      // Slides are generic content with a public div ref, not native form groups.
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
       role="group"
       aria-roledescription="slide"
       data-slot="carousel-item"

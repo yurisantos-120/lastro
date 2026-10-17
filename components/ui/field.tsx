@@ -76,6 +76,8 @@ function Field({
 }: React.ComponentProps<'div'> & VariantProps<typeof fieldVariants>) {
   return (
     <div
+      // Keep the div ref/event contract; ARIA group also supports non-form content.
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
       role="group"
       data-slot="field"
       data-orientation={orientation}

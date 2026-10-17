@@ -5,6 +5,8 @@ function Spinner({ className, ...props }: React.ComponentProps<'svg'>) {
   return (
     <Loader2Icon
       data-slot="spinner"
+      // This component exposes SVG props/refs; output cannot replace its SVG root.
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
       role="status"
       aria-label="Loading"
       className={cn('size-4 animate-spin', className)}

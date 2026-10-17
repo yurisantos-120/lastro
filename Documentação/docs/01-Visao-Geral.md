@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-O NOC Megalink é uma central de conhecimento operacional. Ele reúne informações que precisam ser encontradas rapidamente durante análises e incidentes, como trechos, responsáveis, contatos, designações, validações e observações.
+Lastro é uma central de conhecimento operacional. Ele reúne informações que precisam ser encontradas rapidamente durante análises e incidentes, como trechos, responsáveis, contatos, designações, validações e observações.
 
 ## Funcionalidades atuais
 

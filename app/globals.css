@@ -50,6 +50,7 @@
 
 body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
 }
 
 :root {
@@ -370,6 +371,10 @@ html.dark .noc-list-row:hover {
 .mobile-nav::-webkit-scrollbar { display: none; }
 
 @media (max-width: 639px) {
+  .mobile-nav button {
+    flex: 0 0 68px;
+  }
+
   input,
   select,
   textarea {

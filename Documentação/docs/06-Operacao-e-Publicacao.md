@@ -38,6 +38,8 @@ Não coloque tokens, senhas ou chaves nesse arquivo.
 
 Desenvolvimento e produção usam bancos diferentes. Para levar dados de um ambiente a outro, é necessário um processo explícito de importação ou migração; copiar o código não copia os registros.
 
+Mudanças estruturais seguem o fluxo versionado de migrations descrito em [Banco e persistência](04-Banco-e-Persistencia.md). Nem `pnpm dev` nem `pnpm start` aplicam migrations automaticamente. Nunca use a configuração local/placeholder para atingir produção.
+
 ## Logs e diagnóstico
 
 Erros de API retornam status HTTP e uma mensagem JSON. Na interface, falhas de armazenamento aparecem em um alerta. Durante o desenvolvimento, consulte o terminal onde `pnpm dev` está executando para ver erros do servidor.

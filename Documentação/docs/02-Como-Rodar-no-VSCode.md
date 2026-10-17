@@ -6,7 +6,7 @@ Instale:
 
 - [Visual Studio Code](https://code.visualstudio.com/)
 - Node.js 22.13 ou uma versão mais recente da linha 22
-- pnpm
+- pnpm 11.19.0 (fixado no package.json)
 
 Confira as versões no terminal:
 
@@ -15,18 +15,18 @@ node --version
 pnpm --version
 ```
 
-Se o pnpm não estiver disponível, habilite-o pelo Corepack fornecido pelo Node.js:
+Se o pnpm não estiver disponível, instale-o manualmente e reabra o terminal:
 
 ```powershell
-corepack enable
-corepack prepare pnpm@latest --activate
+npm.cmd install -g pnpm@11.19.0
+pnpm.cmd -v
 ```
 
 ## Abrir o projeto
 
 1. Abra o VS Code.
 2. Acesse **File > Open Folder**.
-3. Selecione `C:\analista de redes\gerencia de informações`.
+3. Selecione `C:\analista de redes\OpusLog` (ou a pasta onde clonou o projeto).
 4. Abra o terminal integrado com **Terminal > New Terminal**.
 
 ## Primeira execução
@@ -37,11 +37,13 @@ Instale as dependências:
 pnpm install
 ```
 
-Inicie o ambiente de desenvolvimento:
+Inicie o ambiente de desenvolvimento pelo verificador Windows:
 
 ```powershell
-pnpm dev
+.\start-dev.ps1
 ```
+
+Alternativa: `.\start-dev.bat`, inclusive por duplo clique. O script instala dependencias quando faltam e executa `pnpm dev`, que tambem continua disponivel diretamente. Para apenas diagnosticar, execute `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check-environment.ps1`.
 
 O terminal exibirá o endereço local, normalmente:
 
@@ -56,7 +58,7 @@ Mantenha esse terminal aberto enquanto utiliza o sistema. Para interromper, pres
 ## Executar pela tarefa do VS Code
 
 1. Acesse **Terminal > Run Task**.
-2. Selecione **NOC Megalink: iniciar desenvolvimento**.
+2. Selecione **Lastro: iniciar desenvolvimento**.
 3. Use o endereço exibido no terminal.
 
 ## Validar antes de entregar uma alteração
@@ -89,7 +91,11 @@ O banco local e o banco publicado são ambientes separados. Um cadastro feito em
 
 ### `pnpm` não é reconhecido
 
-Feche e reabra o terminal depois de ativar o Corepack. Confirme com `pnpm --version`.
+Instale manualmente com `npm.cmd install -g pnpm@11.19.0`, reabra o terminal e confira `pnpm.cmd -v`. O inicializador nao instala pnpm nem modifica PATH. Consulte [Iniciando no Windows](../../README.md#iniciando-no-windows) para instalacao no perfil do usuario quando o prefixo global estiver protegido.
+
+### Corepack retorna EPERM
+
+`corepack enable` tenta criar atalhos junto ao Node, frequentemente em `C:\Program Files\nodejs`. Nao e requisito de inicializacao; nao precisa executa-lo nem usar Administrador. Use a instalacao de pnpm documentada acima.
 
 ### Porta 3000 ocupada
 
@@ -109,10 +115,5 @@ Verifique se a pasta `.wrangler` foi removida, se o projeto foi aberto a partir 
 
 ### Mudança no banco não foi aplicada
 
-Depois de alterar `db/schema.ts`, execute:
+Alterar `db/schema.ts` e reiniciar o servidor não atualiza uma tabela existente. Gere e revise uma migration e siga o procedimento local/remoto documentado em [Banco e persistência](04-Banco-e-Persistencia.md). Não aplique a migration local à base `.wrangler` já inicializada sem resolver antes o baseline de `d1_migrations`.
 
-```powershell
-pnpm db:generate
-```
-
-Revise o SQL criado em `drizzle/` e reinicie o servidor de desenvolvimento.

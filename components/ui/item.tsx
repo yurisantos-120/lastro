@@ -9,6 +9,9 @@ import { Separator } from '@/components/ui/separator';
 function ItemGroup({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
+      // Consumers can render polymorphic items, not necessarily native li children.
+      // Preserve the public div ref/event contract and existing list semantics.
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
       role="list"
       data-slot="item-group"
       className={cn(
