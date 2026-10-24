@@ -1,5 +1,7 @@
 export interface GlpiConfig {
   baseUrl: string;
+  privateHttpHost?: string;
+  httpHost?: string;
   appToken: string;
   userToken: string;
   timeoutMs: number;

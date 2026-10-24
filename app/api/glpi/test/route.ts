@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   try {
     await getGlpiService().testConnection();
     return Response.json(
-      { success: true, message: 'Conexão com GLPI realizada com sucesso.', version: '9.5.4' },
+      { success: true, message: 'Conexão com GLPI realizada com sucesso.', version: 'Não verificada; compatibilidade de referência: 9.5.4' },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {

@@ -1,0 +1,5 @@
+ficha_id,localizador,arquivo,aba_indice,linha,unidade_velocidade_informada,municipio_informado,situacao_servico_informada,natureza,conferencia_integral_original,importacao_liberada
+REV-F10-A1-L7,F10-A1-L7,F10,1,7,Mbps,Santa Maria de Jetibá,Ativo,DECLARACAO_PRELIMINAR_RESPONSAVEL,NAO,NAO
+REV-F10-A1-L13,F10-A1-L13,F10,1,13,Mbps,Santa Maria de Jetibá,Ativo,DECLARACAO_PRELIMINAR_RESPONSAVEL,NAO,NAO
+REV-F10-A1-L36,F10-A1-L36,F10,1,36,Mbps,Santa Maria de Jetibá,Ativo,DECLARACAO_PRELIMINAR_RESPONSAVEL,NAO,NAO
+REV-F10-A1-L48,F10-A1-L48,F10,1,48,Mbps,Santa Maria de Jetibá,Ativo,DECLARACAO_PRELIMINAR_RESPONSAVEL,NAO,NAO

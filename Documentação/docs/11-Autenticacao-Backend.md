@@ -1,5 +1,9 @@
 # Autenticação backend GLPI
 
+## Diagnóstico posterior — Etapa 9
+
+O [diagnóstico HTTPS](20-Diagnostico-e-Preparacao-HTTPS-GLPI.md) confirmou que o 503 da Etapa 8 é produzido pela rejeição da configuração HTTP. A fábrica valida o provedor antes de chamar `currentUser`; por isso até `/api/auth/me` anônimo pode retornar `AUTH_PROVIDER_UNAVAILABLE` quando a configuração é inválida. A porta HTTPS do IP configurado recusou conexão, sem certificado recebido. Credenciais/configuração foram preservadas; o plano depende de endpoint HTTPS oficial e autorização específica para homologação autenticada.
+
 ## Escopo
 
 O GLPI autentica a pessoa e fornece a identidade; o Lastro decide se essa identidade está autorizada, qual role local possui e mantém a própria sessão. A autenticação humana usa `Authorization: Basic` em um cliente isolado. O cliente técnico atual, com `GLPI_USER_TOKEN`, permanece separado e continua sendo usado pelas operações de chamados.
@@ -32,7 +36,7 @@ Após autenticação e autorização, o Lastro gera 32 bytes aleatórios criptog
 
 Cookie: `HttpOnly; SameSite=Lax; Path=/; Max-Age=28800`, sem `Domain`. `Secure` é incluído automaticamente quando a requisição chega por HTTPS; no ambiente HTTP interno fica desativado para manter o teste local funcional. **Habilite e verifique HTTPS antes de expor o login fora da rede interna.** SameSite e validação de Origin são proteções adicionais, não substitutos de HTTPS.
 
-O GLPI interno atualmente acessado por HTTP foi aceito operacionalmente para esta integração; isso permite observar credenciais Basic na rede em trânsito. Restrinja a conectividade à rede confiável e planeje HTTPS. Não use o login humano em uma rede não confiável enquanto GLPI/Lastro estiverem em HTTP.
+A [Implementação 5](16-Integracao-e-Reconciliacao-GLPI.md) remove a aceitação de HTTP para GLPI. Ambos os clientes exigem HTTPS nos leitores de configuração e construtores, copiam a configuração validada e rejeitam redirects. Essa regra inclui rede privada e localhost. Destino que ainda use HTTP precisa ter HTTPS preparado antes do login ou das operações de integração. A versão/infraestrutura atualmente instalada não foi consultada. O trecho navegador → Lastro também precisa de HTTPS em homologação/produção; o acesso HTTP de desenvolvimento local não comprova segurança do deployment.
 
 ## Limitação de tentativas
 

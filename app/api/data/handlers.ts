@@ -1,21 +1,24 @@
 import { DataStorageError } from '../../../db/data-errors.ts';
-import type { CategoryCreateInput, CategoryUpdateInput, RecordCreateInput, RecordUpdateInput } from '../../../db/data-types.ts';
-import { DataValidationError, readJsonBody, validatePayload } from './validation.ts';
+import { CatalogQueryError, parseCatalogQuery, type CatalogQuery } from '../../../db/catalog-pagination.ts';
+import { DataOperationError, operationKey, type DataMethod, type DataReceipt } from '../../../services/data/operations.ts';
+import { DataValidationError, readJsonBody, validatePayload, type ParsedDataPayload } from './validation.ts';
 
 export interface DataStorage {
-  readAll(): Promise<unknown>;
-  createCategory(data: CategoryCreateInput): Promise<void>;
-  updateCategory(data: CategoryUpdateInput): Promise<void>;
-  createRecord(data: RecordCreateInput): Promise<void>;
-  updateRecord(data: RecordUpdateInput): Promise<void>;
+  read(query: CatalogQuery): Promise<unknown>;
+  execute(actorId: number, key: string, method: DataMethod, payload: ParsedDataPayload): Promise<DataReceipt>;
+  recover(actorId: number, key: string): Promise<DataReceipt | null>;
 }
 
-function errorResponse(error: unknown, fallback: string): Response {
+export function errorResponse(error: unknown, fallback: string): Response {
+  if (error instanceof CatalogQueryError) return Response.json({ error: error.message, code: 'INVALID_CATALOG_QUERY' }, { status: 400 });
+  if (error instanceof DataOperationError) return Response.json({ error: error.message, code: error.code, outcome: error.code === 'OPERATION_KEY_CONFLICT' ? 'blocked' : error.code === 'RECEIPT_UNAVAILABLE' ? 'unknown' : 'rejected' }, {status:error.status,headers:{'Cache-Control':'no-store'}});
   if (error instanceof DataValidationError) {
     return Response.json({ error: error.message }, { status: error.status });
   }
   if (error instanceof DataStorageError) {
     switch (error.code) {
+      case 'SCHEMA_OUTDATED':
+        return Response.json({ error: 'Banco de dados desatualizado. Aplique as migrations pendentes.', code: 'SCHEMA_OUTDATED' }, { status: 503 });
       case 'RECORD_NOT_FOUND':
       case 'CATEGORY_NOT_FOUND_FOR_UPDATE':
         return Response.json({ error: 'Registro ou categoria não encontrado.' }, { status: 404 });
@@ -32,39 +35,30 @@ function errorResponse(error: unknown, fallback: string): Response {
   return Response.json({ error: fallback }, { status: 500 });
 }
 
-export function createDataHandlers(storage: DataStorage) {
+export function createDataHandlers(storage: DataStorage, actorId: number) {
+  async function write(request: Request, method: DataMethod) {
+    try {
+      if (request.headers.has('origin') && request.headers.get('origin') !== new URL(request.url).origin) throw new DataOperationError('INVALID_ORIGIN','Origem não autorizada.',403);
+      const payload = validatePayload(await readJsonBody(request), method);
+      const key = operationKey(request.headers.get('Idempotency-Key'));
+      const receipt = await storage.execute(actorId,key,method,payload);
+      return Response.json({operation:receipt}, {status:method === 'POST' ? 201 : 200,headers:{'Cache-Control':'no-store'}});
+    } catch (error) { return errorResponse(error, method === 'POST' ? 'Falha ao salvar os dados. Resultado não confirmado.' : 'Falha ao atualizar os dados. Resultado não confirmado.'); }
+  }
   return {
-    async GET() {
+    async GET(request: Request) {
       try {
-        return Response.json(await storage.readAll());
-      } catch {
-        return Response.json({ error: 'Falha ao carregar dados.' }, { status: 500 });
-      }
+        return Response.json(await storage.read(parseCatalogQuery(new URL(request.url).searchParams)), { headers: { 'Cache-Control': 'no-store' } });
+      } catch (error) { return errorResponse(error, 'Falha ao carregar dados.'); }
     },
 
-    async POST(request: Request) {
+    POST: (request: Request) => write(request,'POST'),
+    PUT: (request: Request) => write(request,'PUT'),
+    async RECOVER(key: string) {
       try {
-        const payload = validatePayload(await readJsonBody(request), 'POST');
-        if (payload.kind === 'category') await storage.createCategory(payload.data);
-        else await storage.createRecord(payload.data);
-        return Response.json(await storage.readAll(), { status: 201 });
-      } catch (error) {
-        return errorResponse(error, 'Falha ao salvar os dados.');
-      }
-    },
-
-    async PUT(request: Request) {
-      try {
-        const payload = validatePayload(await readJsonBody(request), 'PUT');
-        if (payload.kind === 'category') {
-          await storage.updateCategory(payload.data as CategoryUpdateInput);
-        } else {
-          await storage.updateRecord(payload.data as RecordUpdateInput);
-        }
-        return Response.json(await storage.readAll());
-      } catch (error) {
-        return errorResponse(error, 'Falha ao atualizar os dados.');
-      }
+        const receipt = await storage.recover(actorId,operationKey(key));
+        return Response.json(receipt ? {operation:receipt} : {error:'Operação ainda não confirmada. Retome somente a mesma intenção.',code:'NOT_CONFIRMED'}, {status:receipt ? 200 : 404,headers:{'Cache-Control':'no-store'}});
+      } catch (error) { return errorResponse(error,'Falha ao consultar confirmação.'); }
     },
   };
 }

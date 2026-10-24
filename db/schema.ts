@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import type { OperationalState } from '../services/tickets/operations';
 
 export const categories = sqliteTable('categories', {
   id: integer('id').primaryKey(),
@@ -34,6 +35,22 @@ export const information = sqliteTable(
 );
 
 export type TicketResultState = 'pending' | 'created' | 'failed' | 'uncertain';
+
+export const dataOperations = sqliteTable('data_operations', {
+  operationKey: text('operation_key').primaryKey().notNull(),
+  actorId: integer('actor_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  method: text('method').notNull(),
+  kind: text('kind').notNull(),
+  requestHash: text('request_hash').notNull(),
+  responseJson: text('response_json').notNull(),
+  recordedAt: text('recorded_at').notNull(),
+}, (table) => [
+  index('idx_data_operations_actor_time').on(table.actorId, table.recordedAt),
+  check('data_operations_method_check', sql`${table.method} IN ('POST','PUT')`),
+  check('data_operations_kind_check', sql`${table.kind} IN ('category','record')`),
+  check('data_operations_hash_check', sql`length(${table.requestHash})=64 AND ${table.requestHash} NOT GLOB '*[^0-9a-f]*'`),
+  check('data_operations_response_check', sql`json_valid(${table.responseJson}) AND length(${table.responseJson})<=131072`),
+]);
 export type UserRole = 'viewer' | 'operator' | 'admin';
 
 export const users = sqliteTable(
@@ -102,6 +119,7 @@ export const tickets = sqliteTable(
     glpiTicketId: integer('glpi_ticket_id'),
     title: text('title').notNull(),
     content: text('content').notNull(),
+    creationFingerprint: text('creation_fingerprint'),
     status: integer('status'),
     resultState: text('result_state').$type<TicketResultState>().notNull().default('pending'),
     failureCode: text('failure_code'),
@@ -124,6 +142,153 @@ export const tickets = sqliteTable(
     ),
   ],
 );
+
+export const ticketOperations = sqliteTable('ticket_operations', {
+  ticketId: integer('ticket_id').primaryKey().references(() => tickets.id, { onDelete: 'restrict' }),
+  occurrenceType: text('occurrence_type').notNull().default(''),
+  routeDescription: text('route_description').notNull().default(''),
+  routeId: integer('route_id').references(() => information.id, { onDelete: 'restrict' }),
+  responsibleOrganization: text('responsible_organization').notNull().default(''),
+  state: text('state').$type<OperationalState>().notNull(),
+  pendingReason: text('pending_reason').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  guidance: text('guidance').notNull().default(''),
+  openedAt: text('opened_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  normalizedAt: text('normalized_at'),
+  closedAt: text('closed_at'),
+  updatedBy: integer('updated_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  revision: integer('revision').notNull(),
+}, (table) => [
+  index('idx_ticket_operations_state_updated').on(table.state, table.updatedAt),
+  check('ticket_operations_state_check', sql`${table.state} IN ('in_progress', 'pending', 'normalized', 'closed')`),
+  check('ticket_operations_pending_check', sql`${table.state} <> 'pending' OR length(trim(${table.pendingReason})) > 0`),
+  check('ticket_operations_revision_check', sql`${table.revision} >= 1`),
+  check('ticket_operations_dates_check', sql`(${table.state} <> 'normalized' OR ${table.normalizedAt} IS NOT NULL) AND ((${table.state} = 'closed' AND ${table.closedAt} IS NOT NULL) OR (${table.state} <> 'closed' AND ${table.closedAt} IS NULL))`),
+]);
+
+export const ticketOperationEvents = sqliteTable('ticket_operation_events', {
+  id: integer('id').primaryKey(),
+  ticketId: integer('ticket_id').notNull().references(() => ticketOperations.ticketId, { onDelete: 'restrict' }),
+  operationKey: text('operation_key').notNull(),
+  requestJson: text('request_json').notNull(),
+  actorId: integer('actor_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  actorName: text('actor_name').notNull(),
+  occurredAt: text('occurred_at').notNull(),
+  type: text('type').$type<'initialized' | 'state_changed' | 'updated'>().notNull(),
+  previousState: text('previous_state').$type<OperationalState>(),
+  nextState: text('next_state').$type<OperationalState>().notNull(),
+  description: text('description').notNull().default(''),
+  snapshotJson: text('snapshot_json').notNull(),
+  revision: integer('revision').notNull(),
+}, (table) => [
+  uniqueIndex('idx_ticket_operation_events_key').on(table.operationKey),
+  uniqueIndex('idx_ticket_operation_events_revision').on(table.ticketId, table.revision),
+  index('idx_ticket_operation_events_chronology').on(table.ticketId, table.occurredAt, table.id),
+  check('ticket_operation_events_type_check', sql`${table.type} IN ('initialized', 'state_changed', 'updated')`),
+  check('ticket_operation_events_state_check', sql`${table.nextState} IN ('in_progress', 'pending', 'normalized', 'closed') AND (${table.previousState} IS NULL OR ${table.previousState} IN ('in_progress', 'pending', 'normalized', 'closed'))`),
+  check('ticket_operation_events_revision_check', sql`${table.revision} >= 1`),
+]);
+
+export const shiftHandoffs = sqliteTable('shift_handoffs', {
+  id: text('id').primaryKey(),
+  operationKey: text('operation_key').notNull(),
+  requestHash: text('request_hash').notNull(),
+  periodKey: text('period_key').notNull(),
+  configJson: text('config_json').notNull(),
+  periodJson: text('period_json').notNull(),
+  snapshotJson: text('snapshot_json').notNull(),
+  notes: text('notes').notNull().default(''),
+  guidance: text('guidance').notNull().default(''),
+  deliveredBy: integer('delivered_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  deliveredName: text('delivered_name').notNull(),
+  deliveredAt: text('delivered_at').notNull(),
+}, (table) => [
+  uniqueIndex('idx_shift_handoffs_key').on(table.operationKey),
+  uniqueIndex('idx_shift_handoffs_period').on(table.periodKey),
+  index('idx_shift_handoffs_delivered').on(table.deliveredAt, table.id),
+  check('shift_handoffs_json_check', sql`json_valid(${table.configJson}) AND json_valid(${table.periodJson}) AND json_valid(${table.snapshotJson})`),
+]);
+
+export const shiftReceipts = sqliteTable('shift_receipts', {
+  handoffId: text('handoff_id').primaryKey().references(() => shiftHandoffs.id, { onDelete: 'restrict' }),
+  operationKey: text('operation_key').notNull(),
+  receivedBy: integer('received_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  receivedName: text('received_name').notNull(),
+  receivedAt: text('received_at').notNull(),
+}, (table) => [uniqueIndex('idx_shift_receipts_key').on(table.operationKey)]);
+
+export const ticketRfos = sqliteTable('ticket_rfos', {
+  ticketId: integer('ticket_id').primaryKey().references(() => tickets.id, { onDelete: 'restrict' }),
+  glpiTicketId: integer('glpi_ticket_id').notNull(),
+  investigation: text('investigation').notNull(),
+  completion: text('completion').notNull(),
+  cause: text('cause').notNull().default(''),
+  technicalDescription: text('technical_description').notNull().default(''),
+  solution: text('solution').notNull().default(''),
+  responsibleTeam: text('responsible_team').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  normalizedAt: text('normalized_at'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  completedAt: text('completed_at'),
+  updatedBy: integer('updated_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  revision: integer('revision').notNull(),
+}, (table) => [
+  index('idx_ticket_rfos_completion').on(table.completion, table.updatedAt),
+  check('ticket_rfos_investigation_check', sql`${table.investigation} IN ('investigating', 'confirmed') AND (${table.investigation} <> 'confirmed' OR length(trim(${table.cause})) > 0)`),
+  check('ticket_rfos_completion_check', sql`${table.completion} IN ('pending', 'completed') AND ((${table.completion} = 'pending' AND ${table.completedAt} IS NULL) OR (${table.completion} = 'completed' AND ${table.completedAt} IS NOT NULL AND ${table.normalizedAt} IS NOT NULL AND ${table.investigation} = 'confirmed' AND length(trim(${table.technicalDescription})) > 0 AND length(trim(${table.solution})) > 0))`),
+  check('ticket_rfos_identity_check', sql`${table.glpiTicketId} > 0 AND ${table.revision} >= 1`),
+]);
+export const ticketRfoRevisions = sqliteTable('ticket_rfo_revisions', {
+  id: integer('id').primaryKey(),
+  ticketId: integer('ticket_id').notNull().references(() => ticketRfos.ticketId, { onDelete: 'restrict' }),
+  operationKey: text('operation_key').notNull(),
+  requestHash: text('request_hash').notNull(),
+  actorId: integer('actor_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  actorName: text('actor_name').notNull(),
+  recordedAt: text('recorded_at').notNull(),
+  revision: integer('revision').notNull(),
+  snapshotJson: text('snapshot_json').notNull(),
+}, (table) => [
+  uniqueIndex('idx_ticket_rfo_revisions_key').on(table.operationKey),
+  uniqueIndex('idx_ticket_rfo_revisions_number').on(table.ticketId, table.revision),
+  check('ticket_rfo_revisions_check', sql`${table.revision} >= 1 AND json_valid(${table.snapshotJson})`),
+]);
+
+export const glpiOperations = sqliteTable('glpi_operations', {
+  id: text('id').primaryKey(),
+  ticketId: integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'restrict' }),
+  action: text('action').notNull(),
+  requestJson: text('request_json').notNull(),
+  actorId: integer('actor_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  updatedBy: integer('updated_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  state: text('state').notNull(),
+  code: text('code').notNull().default(''),
+  remoteId: integer('remote_id').notNull(),
+  solutionId: integer('solution_id'),
+  observationJson: text('observation_json').notNull().default('{}'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  revision: integer('revision').notNull().default(1),
+}, (table) => [
+  index('idx_glpi_operations_ticket').on(table.ticketId, table.createdAt, table.id),
+  uniqueIndex('idx_glpi_operations_active').on(table.ticketId).where(sql`${table.state} IN ('pending', 'uncertain')`),
+  check('glpi_operations_action_check', sql`${table.action} IN ('sync', 'update', 'solution', 'close', 'associate')`),
+  check('glpi_operations_state_check', sql`${table.state} IN ('pending', 'uncertain', 'confirmed', 'failed')`),
+  check('glpi_operations_valid_check', sql`${table.remoteId} > 0 AND ${table.revision} >= 1 AND json_valid(${table.requestJson}) AND json_valid(${table.observationJson})`),
+]);
+export const glpiOperationEvents = sqliteTable('glpi_operation_events', {
+  id: integer('id').primaryKey(),
+  operationId: text('operation_id').notNull().references(() => glpiOperations.id, { onDelete: 'restrict' }),
+  actorId: integer('actor_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  recordedAt: text('recorded_at').notNull(),
+  revision: integer('revision').notNull(),
+  snapshotJson: text('snapshot_json').notNull(),
+}, (table) => [
+  uniqueIndex('idx_glpi_operation_events_revision').on(table.operationId, table.revision),
+  check('glpi_operation_events_json_check', sql`json_valid(${table.snapshotJson})`),
+]);
 
 export type ImportBatchStatus = 'processing' | 'completed' | 'completed_with_errors' | 'failed';
 export type ImportRecordStatus = 'pending' | 'inserted' | 'rejected' | 'ignored';

@@ -8,6 +8,10 @@ const alertVariants = cva(
   {
     variants: {
       variant: {
+        error: 'lastro-feedback lastro-feedback-error',
+        warning: 'lastro-feedback lastro-feedback-warning',
+        success: 'lastro-feedback lastro-feedback-success',
+        info: 'lastro-feedback lastro-feedback-info',
         default: 'bg-card text-card-foreground',
         destructive:
           'bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current',
@@ -22,16 +26,21 @@ const alertVariants = cva(
 function Alert({
   className,
   variant,
+  role = 'alert',
   ...props
 }: React.ComponentProps<'div'> & VariantProps<typeof alertVariants>) {
   return (
     <div
       data-slot="alert"
-      role="alert"
+      role={role}
       className={cn(alertVariants({ variant }), className)}
       {...props}
     />
   );
+}
+
+function AlertStatus({ className, variant = 'info', ...props }: React.ComponentProps<'output'> & VariantProps<typeof alertVariants>) {
+  return <output data-slot="alert" className={cn(alertVariants({ variant }), className)} {...props} />;
 }
 
 function AlertTitle({ className, ...props }: React.ComponentProps<'div'>) {
@@ -73,4 +82,4 @@ function AlertAction({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
-export { Alert, AlertTitle, AlertDescription, AlertAction };
+export { Alert, AlertStatus, AlertTitle, AlertDescription, AlertAction };

@@ -94,7 +94,14 @@ export class AuthService {
   }
 
   async currentUser(token: string | null): Promise<AuthUser | null> {
-    if (!token || !/^[A-Za-z0-9_-]{40,50}$/.test(token)) return null;
+    if (!token || !/^[A-Za-z0-9_-]{40,50}$/.test(token)) {
+      try {
+        await this.repository.checkSessionStorage();
+        return null;
+      } catch {
+        throw new AuthError('AUTH_STORAGE_UNAVAILABLE');
+      }
+    }
     try {
       return await this.repository.getSessionUser({
         tokenHash: await hashSessionToken(token),

@@ -76,20 +76,25 @@ export class D1TicketRepository implements TicketRepository {
 
   async createPending(input: CreateTicketRequest) {
     try {
+      const schema = await this.db.prepare('PRAGMA table_info(tickets)').all<{ name: string }>();
+      const hasFingerprint = schema.results.some(column => column.name === 'creation_fingerprint');
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([input.title,input.content,input.createdBy ?? null])));
+      const fingerprint = Array.from(new Uint8Array(digest),byte => byte.toString(16).padStart(2,'0')).join('');
       const now = new Date().toISOString();
       const result = await this.db
         .prepare(`INSERT INTO tickets
-          (operation_key, title, content, result_state, created_at, updated_at, created_by, revision)
-          VALUES (?, ?, ?, 'pending', ?, ?, ?, 1)
+          (operation_key, title, content, result_state, created_at, updated_at, created_by, revision${hasFingerprint ? ', creation_fingerprint' : ''})
+          VALUES (?, ?, ?, 'pending', ?, ?, ?, 1${hasFingerprint ? ', ?' : ''})
           ON CONFLICT(operation_key) DO NOTHING`)
-        .bind(input.operationKey, input.title, input.content, now, now, input.createdBy ?? null)
+        .bind(input.operationKey, input.title, input.content, now, now, input.createdBy ?? null, ...(hasFingerprint ? [fingerprint] : []))
         .run();
       const ticket = await this.findOne(
         `SELECT ${columns} FROM tickets WHERE operation_key = ?`,
         input.operationKey,
       );
       if (!ticket) throw new TicketStorageError();
-      return { ticket, inserted: result.meta.changes === 1 };
+      const original = hasFingerprint ? await this.db.prepare('SELECT creation_fingerprint AS fingerprint FROM tickets WHERE id=?').bind(ticket.id).first<{ fingerprint: string | null }>() : null;
+      return { ticket, inserted: result.meta.changes === 1, matchesRequest: original?.fingerprint ? original.fingerprint === fingerprint : undefined };
     } catch {
       throw new TicketStorageError();
     }
@@ -153,6 +158,11 @@ export class D1TicketRepository implements TicketRepository {
     } catch {
       throw new TicketStorageError();
     }
+  }
+
+  async getByLocalId(id: number): Promise<LocalTicket | null> {
+    try { return await this.findOne(`SELECT ${columns} FROM tickets WHERE id = ?`, id); }
+    catch { throw new TicketStorageError(); }
   }
 
   async syncFromGlpi(ticket: GlpiTicketDetails): Promise<LocalTicket | null> {

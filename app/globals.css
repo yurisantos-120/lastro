@@ -53,6 +53,11 @@ body {
   overflow-x: hidden;
 }
 
+/* Keep the login's dark brand panel legible beside the light form. */
+main .lastro-login-heading {
+  color: #ffffff;
+}
+
 :root {
   --background: #edf3f8;
   --foreground: #17212b;
@@ -91,8 +96,8 @@ body {
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
+  --card: #111d2c;
+  --card-foreground: #e7edf5;
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.922 0 0);
@@ -169,8 +174,35 @@ html.dark select {
   color: #edf3f9 !important;
 }
 
-html.dark button:hover { background-color: #1a2a3d; }
-html.dark button.bg-\[\#ff6b2c\]:hover { background-color: #e85b20 !important; }
+/* Feedback pairs reuse the existing red/amber/emerald palette. Keep this
+   scoped: the legacy main p/span/div inheritance must not override them. */
+[data-slot='alert'].lastro-feedback {
+  color: var(--feedback-foreground);
+  background: var(--feedback-background);
+  border-color: var(--feedback-border);
+}
+[data-slot='alert'].lastro-feedback :where(p, span, div) { color: inherit; }
+.lastro-feedback-error {
+  --feedback-foreground: var(--color-red-800);
+  --feedback-background: var(--color-red-50);
+  --feedback-border: var(--color-red-200);
+}
+.lastro-feedback-warning {
+  --feedback-foreground: var(--color-amber-900);
+  --feedback-background: var(--color-amber-50);
+  --feedback-border: var(--color-amber-300);
+}
+.lastro-feedback-success {
+  --feedback-foreground: var(--color-emerald-800);
+  --feedback-background: var(--color-emerald-50);
+  --feedback-border: var(--color-emerald-200);
+}
+.lastro-feedback-info {
+  --feedback-foreground: var(--foreground);
+  --feedback-background: var(--background);
+  --feedback-border: var(--border);
+}
+html.dark .lastro-form-legend { color: #b5c2d2; }
 
 .noc-sidebar {
   background: linear-gradient(180deg, #0b1728 0%, #0d1a2e 100%);
@@ -365,10 +397,11 @@ html.dark .noc-list-row:hover {
 .mobile-nav {
   padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  scrollbar-width: thin;
 }
 
-.mobile-nav::-webkit-scrollbar { display: none; }
+.mobile-nav::-webkit-scrollbar { height: 4px; }
+.mobile-nav::-webkit-scrollbar-thumb { background: #91a1b5; border-radius: 4px; }
 
 @media (max-width: 639px) {
   .mobile-nav button {
@@ -380,4 +413,16 @@ html.dark .noc-list-row:hover {
   textarea {
     font-size: 16px !important;
   }
+}
+
+/* Shared form geometry; login and compact actions keep their contextual sizes. */
+.lastro-field :is(input:not([type=color]), select) { height: 2.5rem; }
+main select { border-radius: var(--radius-lg); min-height: 2.5rem; }
+main select:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.lastro-form-actions { position: sticky; bottom: 0; z-index: 10; padding: .75rem 0; background: var(--card); }
+dialog > div { scroll-padding-bottom: 5rem; }
+.mobile-nav button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) {
+  main *, main *::before, main *::after { transition-duration: 0s !important; animation-duration: 0s !important; scroll-behavior: auto !important; }
+  .noc-stat-card:hover { transform: none; }
 }

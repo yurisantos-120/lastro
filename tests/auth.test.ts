@@ -168,6 +168,50 @@ void test('GLPI unavailability is normalized to temporary failure', async () => 
   } finally { harness.close(); }
 });
 
+void test('session lookup remains available when GLPI configuration or network is unavailable', async () => {
+  const harness = new AuthD1Harness();
+  try {
+    insertUser(harness);
+    const provider = new MockIdentityProvider(new GlpiUserAuthError('configuration'));
+    const api = handlers(harness, provider);
+    const absent = await api.me(new Request('http://localhost/api/auth/me'));
+    assert.equal(absent.status, 200);
+    assert.deepEqual(await absent.json(), { user: null });
+    const repository = new D1AuthRepository(harness.asD1());
+    await repository.createSession({
+      userId: 1, tokenHash: await hashSessionToken(fixedToken),
+      createdAt: fixedNow.toISOString(), expiresAt: '2026-10-08T00:00:00.000Z',
+    });
+    const valid = await api.me(new Request('http://localhost/api/auth/me', {
+      headers: { cookie: `opuslog_session=${fixedToken}` },
+    }));
+    assert.equal(valid.status, 200);
+    assert.equal((await valid.json() as { user: AuthUser }).user.id, 1);
+    assert.equal(provider.calls, 0);
+    const login = await api.login(loginRequest({ username: 'operator.test', password: 'synthetic-only' }));
+    assert.equal(login.status, 503);
+    assert.equal((await login.json() as { code: string }).code, 'AUTH_PROVIDER_UNAVAILABLE');
+    assert.equal(provider.calls, 1);
+  } finally { harness.close(); }
+});
+
+void test('anonymous session check reports unavailable storage instead of a false empty session', async () => {
+  const unavailable = new D1AuthRepository({
+    prepare() { throw new Error('synthetic D1 failure'); },
+  } as unknown as D1Database);
+  const api = createAuthHandlers({
+    service: new AuthService({ repository: unavailable, glpi: new MockIdentityProvider() }),
+    limiter: new LoginRateLimiter(),
+  });
+  for (const cookie of [undefined, 'opuslog_session=malformed']) {
+    const response = await api.me(new Request('http://localhost/api/auth/me', {
+      headers: cookie ? { cookie } : {},
+    }));
+    assert.equal(response.status, 503);
+    assert.equal((await response.json() as { code: string }).code, 'AUTH_STORAGE_UNAVAILABLE');
+  }
+});
+
 void test('authenticated GLPI identity without local user and with closed bootstrap gets no session', async () => {
   const harness = new AuthD1Harness();
   try {
@@ -461,7 +505,7 @@ void test('GLPI Basic auth client sends human credentials only to initSession an
     Response.json({ success: true }),
   ];
   const client = new GlpiUserAuthClient(readGlpiUserAuthConfig({
-    GLPI_API_VERSION: 'v1', GLPI_BASE_URL: 'http://glpi.example.invalid/glpi/apirest.php', GLPI_APP_TOKEN: 'synthetic-app', GLPI_TIMEOUT_MS: '10000',
+    GLPI_API_VERSION: 'v1', GLPI_BASE_URL: 'https://glpi.example.invalid/glpi/apirest.php', GLPI_APP_TOKEN: 'synthetic-app', GLPI_TIMEOUT_MS: '10000',
   }), async (input, init) => {
     const url = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
     calls.push({ url, init: init ?? {} });
@@ -486,7 +530,7 @@ void test('GLPI Basic auth client sends human credentials only to initSession an
 void test('GLPI auth kills the session after identity failure and does not retry invalid credentials', async () => {
   let calls = 0;
   const invalid = new GlpiUserAuthClient(readGlpiUserAuthConfig({
-    GLPI_API_VERSION: 'v1', GLPI_BASE_URL: 'http://glpi.example.invalid/glpi/apirest.php', GLPI_TIMEOUT_MS: '10000',
+    GLPI_API_VERSION: 'v1', GLPI_BASE_URL: 'https://glpi.example.invalid/glpi/apirest.php', GLPI_TIMEOUT_MS: '10000',
   }), async () => { calls += 1; return Response.json({ ERROR: 'safe synthetic denial' }, { status: 401 }); });
   await assert.rejects(invalid.authenticate('human', 'synthetic-only'), { failure: 'invalid-credentials' });
   assert.equal(calls, 1);
@@ -494,7 +538,7 @@ void test('GLPI auth kills the session after identity failure and does not retry
   const responses = [Response.json({ session_token: 'synthetic-token' }), Response.json({ session: {} }), Response.json({ success: true })];
   const cleanupCalls: string[] = [];
   const malformedIdentity = new GlpiUserAuthClient(readGlpiUserAuthConfig({
-    GLPI_API_VERSION: 'v1', GLPI_BASE_URL: 'http://glpi.example.invalid/glpi/apirest.php', GLPI_TIMEOUT_MS: '10000',
+    GLPI_API_VERSION: 'v1', GLPI_BASE_URL: 'https://glpi.example.invalid/glpi/apirest.php', GLPI_TIMEOUT_MS: '10000',
   }), async (input) => {
     cleanupCalls.push(input instanceof Request ? input.url : input instanceof URL ? input.href : input);
     return responses.shift()!;

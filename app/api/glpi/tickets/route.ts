@@ -5,6 +5,7 @@ import { getTicketWorkflow } from '@/services/tickets/ticket-workflow-runtime';
 import { getAuthService } from '@/services/auth/auth-runtime';
 import { withRequiredRole } from '@/services/auth/api-access';
 import type { AuthUser } from '@/services/auth/auth-types';
+import { readJsonBody, DataValidationError } from '@/app/api/data/validation';
 
 const resolveCurrentUser = (token: string | null) => getAuthService().currentUser(token);
 
@@ -39,8 +40,9 @@ async function createTicket(request: Request, user: AuthUser) {
       throw new GlpiError('GLPI_FORBIDDEN', 403);
     let input: unknown;
     try {
-      input = await request.json();
-    } catch {
+      input = await readJsonBody(request);
+    } catch (error) {
+      if (error instanceof DataValidationError) return Response.json({ success: false, code: 'GLPI_VALIDATION_ERROR', message: 'Corpo JSON inválido ou excede o limite de 64 KiB.' }, { status: error.status, headers: { 'Cache-Control': 'no-store' } });
       throw new GlpiError('GLPI_VALIDATION_ERROR', 400);
     }
     const result = await getTicketWorkflow().create(input, user.id);

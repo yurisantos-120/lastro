@@ -1,5 +1,7 @@
 # 4. Banco de dados e persistência
 
+> Atualização da Etapa 14.1: o runtime não cria mais tabelas ou índices durante leituras ou escritas cadastrais. As migrations são a única fonte de evolução do schema. O histórico do bootstrap antigo permanece abaixo apenas para explicar bancos legados; veja [Correção de DDL durante consultas](33-Correcao-DDL-Durante-Consultas.md).
+
 ## Banco utilizado
 
 O sistema usa Cloudflare D1, um banco relacional compatível com SQLite. No desenvolvimento, o plugin da Cloudflare fornece uma instância local. Na publicação, a plataforma injeta o banco associado ao binding `DB`.
@@ -44,9 +46,11 @@ categories (1) ─────────── (N) information
 
 ## Inicialização
 
-`ensureDatabase()` cria tabelas e índices com `CREATE TABLE/INDEX IF NOT EXISTS`. A leitura inicial (`GET /api/data`) ainda chama essa rotina; portanto, uma leitura em banco novo pode criar schema e inserir os exemplos iniciais. Em banco já inicializado, os comandos de schema são idempotentes e os inserts de seed ficam condicionados à tabela de categorias estar vazia.
+`GET /api/data` apenas consulta `categories` e `information`; não executa DDL nem insere dados. As rotinas legadas de escrita também não inicializam schema. Em banco vazio ou com colunas faltantes, a leitura retorna HTTP 503 com `SCHEMA_OUTDATED`, indicando que as migrations pendentes precisam de aplicação explícita. Não há seed automático no runtime atual.
 
-As categorias e registros iniciais são inseridos em um único `D1Database.batch()`. No D1, batch é uma transação sequencial: se uma instrução falhar, o batch inteiro é revertido. Isso evita o estado parcial (categorias sem registros iniciais) na nova inicialização. A criação dos seeds não substitui nem migra registros de uma inicialização anterior incompleta.
+Desde a Etapa 14.2, o GET exige `resource` e executa consultas limitadas por página, filtros no SQL e agregados específicos para a Visão geral. O contrato detalhado está em [Paginação e consultas cadastrais](34-Paginacao-e-Consultas-Cadastrais.md). A garantia de leitura sem DDL continua válida.
+
+Desde a Etapa 14.4, `db/storage.ts` expõe somente a consulta e o repositório de operações idempotentes usados pelo runtime. Os antigos adaptadores diretos de escrita foram preservados exclusivamente em `tests/helpers/legacy-persistence.ts` para regressão de persistência.
 
 As tabelas usam `INTEGER PRIMARY KEY`, que no SQLite/D1 é uma chave inteira associada ao `rowid`. Novos cadastros omitem a coluna `id` para o banco gerar o identificador. Não usamos `AUTOINCREMENT`: não há requisito de nunca reutilizar IDs após exclusões (o sistema não oferece exclusão) e o auto incremento nativo já evita colisões entre inserções concorrentes.
 
@@ -60,11 +64,13 @@ As tabelas usam `INTEGER PRIMARY KEY`, que no SQLite/D1 é uma chave inteira ass
 - `drizzle/0000_*.sql`, `0001_*.sql` e `0002_*.sql` são o histórico incremental, em ordem lexicográfica.
 - `drizzle.config.ts` configura `drizzle-kit generate` para comparar `db/schema.ts` e gerar SQL em `drizzle/`.
 - Wrangler D1 aplica os arquivos SQL e registra o histórico na tabela `d1_migrations`.
-- `ensureDatabase()` é bootstrap/compatibilidade da aplicação. `CREATE TABLE IF NOT EXISTS` não atualiza tabela existente e não é migration.
+- O bootstrap `ensureDatabase()` foi removido na Etapa 14.1. Consultas e escritas não substituem migrations.
 
 O binding da aplicação é `DB`. O plugin local definido em `vite.config.ts` usa o banco local lógico `site-creator-d1` e ID placeholder; não é a identidade do D1 de produção. `wrangler.d1.local.jsonc` expõe esse binding ao CLI, aponta `migrations_dir` para `drizzle/` e é exclusivamente configuração local.
 
-### Comparação do schema atual
+### Comparação histórica do bootstrap removido
+
+A coluna de bootstrap abaixo descreve a implementação anterior à Etapa 14.1; ela não representa DDL executado pelo runtime atual.
 
 | Elemento | `db/schema.ts` | Migration final (`0000`–`0002`) | DDL de bootstrap | Compatível? |
 |---|---|---|---|---|
@@ -89,7 +95,7 @@ Revise o SQL novo em `drizzle/`, os snapshots e o efeito sobre dados existentes 
 
 ### Aplicar no D1 local
 
-Em uma base local limpa, aplique as migrations antes de iniciar a aplicação (antes de um GET criar o schema pelo bootstrap):
+Em uma base local limpa, aplique as migrations antes de iniciar a aplicação:
 
 ```powershell
 pnpm db:migrations:list:local
@@ -99,7 +105,7 @@ pnpm db:migrations:list:local
 
 Os dois scripts sempre usam `--local` e `wrangler.d1.local.jsonc`; a persistência padrão fica em `.wrangler`. O script `pnpm start` aponta explicitamente para `.wrangler/state`, garantindo que a aplicação use a mesma base local. O primeiro comando lista migrations pendentes, o segundo aplica, e o último deve confirmar que não restaram pendências. `pnpm dev` e `pnpm start` não aplicam migrations automaticamente.
 
-**Atenção à base local existente:** o bootstrap atual pode já ter criado o schema final sem histórico `d1_migrations`. Nesse caso, Wrangler considerará `0000` pendente e tentará criar tabelas existentes. Não execute `pnpm db:migrate:local` nessa base antes de resolver o baseline. Faça primeiro uma cópia/backup e use um ambiente temporário para validação. O mesmo cuidado será obrigatório para uma base remota preexistente.
+**Atenção à base local existente:** o bootstrap legado pode ter criado o schema final sem histórico `d1_migrations`. Nesse caso, Wrangler considerará `0000` pendente e tentará criar tabelas existentes. Não execute `pnpm db:migrate:local` nessa base antes de resolver o baseline. Faça primeiro uma cópia/backup e use um ambiente temporário para validação. O mesmo cuidado será obrigatório para uma base remota preexistente.
 
 #### Baseline de uma base local já inicializada pelo bootstrap
 
@@ -133,11 +139,9 @@ Esses comandos são apenas referência e **não foram executados**. `--remote` �
 
 Wrangler registra migrations aplicadas em `d1_migrations`; a listagem retorna as pendentes, e uma migration já registrada não deve ser reaplicada. O `apply` pede confirmação interativa e, segundo a documentação D1, captura backup; se uma migration falhar, ela é revertida e as anteriores permanecem aplicadas. Um erro exige revisar SQL/estado antes de tentar novamente; não remova manualmente a tabela de histórico nem marque versões aplicadas sem comparar o schema.
 
-### Migration, bootstrap e seeds
+### Migrations e dados iniciais
 
-Migration altera estrutura e mantém histórico; seed/população de dados é outra responsabilidade. Os seeds operacionais são inseridos por `ensureDatabase()`, não pelos arquivos Drizzle. Migration não corrige seeds parcialmente inseridos por versões antigas.
-
-O `GET /api/data` ainda chama `ensureDatabase()` e pode criar schema/seeds em uma base vazia. Em produção futura, migrations precisam ser aplicadas antes de liberar o app; o bootstrap não consegue evoluir estrutura já existente. Uma base antiga criada pelo bootstrap, mas sem registro de migrations, requer um plano de baseline separado e verificado — não aplique `0000` às cegas.
+Migration altera estrutura e mantém histórico; seed/população de dados é outra responsabilidade. O runtime atual não insere categorias ou informações automaticamente. Dados legados permanecem preservados. Uma base antiga criada pelo bootstrap, mas sem registro de migrations, requer um plano de baseline separado e verificado — não aplique `0000` às cegas.
 
 ### Procedimento de atualização de uma base
 

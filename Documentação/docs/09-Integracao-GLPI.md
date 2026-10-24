@@ -1,5 +1,7 @@
 # Integração GLPI — API REST clássica
 
+A [Etapa 9](20-Diagnostico-e-Preparacao-HTTPS-GLPI.md) documenta a recusa de TCP 443 no destino então configurado e o plano de HTTPS/homologação. O [ajuste posterior de HTTP explícito](32-Opt-in-HTTP-GLPI.md) descreve a exceção atual e seus riscos. HTTPS continua suportado com validação de certificados.
+
 Este documento descreve a configuração técnica da integração GLPI 9.5.4. O fluxo operacional e o histórico local de chamados estão em [Chamados e integração GLPI](10-Chamados-e-Integracao-GLPI.md).
 
 ## Arquitetura e autenticação
@@ -8,7 +10,7 @@ Este documento descreve a configuração técnica da integração GLPI 9.5.4. O 
 
 O backend inicia uma sessão com `GET initSession`, enviando `Authorization: user_token ...` e `App-Token` quando configurado. O `session_token` é mantido apenas em memória e enviado como `Session-Token` nas chamadas autenticadas. Cada operação encerra a sessão com `GET killSession` em `finally`. Sessões e tokens nunca são enviados ao navegador nem persistidos no D1.
 
-O cliente usa fetch nativo, timeouts limitados entre 1 e 30 segundos e `redirect: 'manual'`; respostas opacas ou com status 3xx são recusadas sem seguir o destino, evitando encaminhar tokens. A autenticação e as leituras usam `GLPI_TIMEOUT_MS`; apenas o POST de criação usa `GLPI_TICKET_CREATE_TIMEOUT_MS`. Esse modo é compatível com Node e Workerd. O teste de conexão valida `initSession`, consulta `getActiveProfile` e encerra a sessão. Respostas externas são normalizadas e seus corpos/headers privados não são devolvidos ao frontend.
+O cliente usa fetch nativo, timeouts limitados entre 1 e 30 segundos e `redirect: 'manual'`; respostas opacas ou com status 3xx são recusadas sem seguir o destino, evitando encaminhar tokens. A autenticação e as leituras usam `GLPI_TIMEOUT_MS`; escritas POST/PUT usam `GLPI_TICKET_CREATE_TIMEOUT_MS`. Esse modo é compatível com Node e Workerd. O teste de conexão valida `initSession`, consulta `getActiveProfile` e encerra a sessão; não comprova a versão instalada. Respostas externas são normalizadas e seus corpos/headers privados não são devolvidos ao frontend.
 
 ## Configuração do servidor
 
@@ -19,11 +21,13 @@ No desenvolvimento Vinext/Vite (`pnpm dev`), o Cloudflare Vite plugin carrega o 
 | Variável | Regra |
 |---|---|
 | `GLPI_API_VERSION` | Obrigatória; `v1` para a API REST clássica |
-| `GLPI_BASE_URL` | URL completa da API, terminada em `/apirest.php`; preferir HTTPS |
+| `GLPI_BASE_URL` | URL completa da API, terminada em `/apirest.php`; HTTPS é o padrão; HTTP exige host IPv4 exato fixado |
+| `GLPI_PRIVATE_HTTP_HOST` | Opcional: host RFC1918 exato para rota privada protegida; não combinar com `GLPI_HTTP_HOST` |
+| `GLPI_HTTP_HOST` | Opcional: aceitação explícita de HTTP sem TLS para um IPv4 exato, inclusive público; expõe credenciais e tokens na rede |
 | `GLPI_USER_TOKEN` | Token de acesso remoto do usuário técnico GLPI |
 | `GLPI_APP_TOKEN` | App Token do cliente API; pode estar vazio somente se a instância não o exigir |
 | `GLPI_TIMEOUT_MS` | Opcional; padrão 10000, inteiro entre 1000 e 30000 |
-| `GLPI_TICKET_CREATE_TIMEOUT_MS` | Opcional; padrão 20000, inteiro entre 1000 e 30000; aplicado somente ao POST de Ticket |
+| `GLPI_TICKET_CREATE_TIMEOUT_MS` | Opcional; padrão 20000, inteiro entre 1000 e 30000; aplicado às escritas POST/PUT |
 
 O timeout de criação foi separado após uma criação real levar aproximadamente 10,26 s com o limite geral de 10 s. O padrão de 20 s duplica esse limite para dar margem a uma resposta mais lenta do GLPI sem prolongar autenticação e leituras. Um POST que exceda o timeout continua resultando em `uncertain`; o sistema não repete a criação automaticamente.
 
@@ -46,7 +50,7 @@ Uma falha ao encerrar a sessão é registrada somente com código seguro e não 
 
 ## Segurança e publicação
 
-O backend de login individual e sessão local está documentado em [Autenticação backend GLPI](11-Autenticacao-Backend.md). Nesta etapa, a autenticação ainda não protege globalmente as rotas operacionais nem aplica roles nos endpoints existentes. Mantenha os endpoints acessíveis somente pelo ambiente confiável. A checagem de `Origin` reduz chamadas de outro site no navegador, mas não substitui autorização por usuário.
+O backend de login individual e sessão local está documentado em [Autenticação backend GLPI](11-Autenticacao-Backend.md). As rotas de chamados usam guards de sessão e perfil: leitura local conforme o endpoint, operações GLPI por operator/admin e teste de conexão por admin. A checagem de `Origin` é complementar à autorização. A [Implementação 5](16-Integracao-e-Reconciliacao-GLPI.md) acrescenta sincronização auditada, atualização, solução, fechamento e reconciliação. A regra original de HTTPS obrigatório foi ampliada pelo [opt-in HTTP posterior](32-Opt-in-HTTP-GLPI.md).
 
 Não exponha a API operacional publicamente. Um Worker Cloudflare precisa ter conectividade de rede com a instalação GLPI; conectividade privada da empresa não é criada automaticamente pelo Worker.
 

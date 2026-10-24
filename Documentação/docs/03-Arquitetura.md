@@ -58,11 +58,11 @@ vite.config.ts             Vinext, Sites e ambiente local Cloudflare
 ## Fluxo de leitura
 
 1. `app/page.tsx` é carregado no navegador.
-2. Um `GET /api/data` solicita categorias e informações.
-3. `route.ts` chama `readAll()`.
-4. `storage.ts` garante que as tabelas existam e executa consultas preparadas.
-5. A API devolve JSON.
-6. O React atualiza a interface e a busca passa a usar esses registros.
+2. A interface solicita `GET /api/data` com `resource` explícito: `summary`, `records`, `categories`, `routes` ou um item individual.
+3. A API valida autorização, filtros, página e tamanho antes de consultar o D1.
+4. `storage.ts` chama consultas preparadas e limitadas em `catalog-pagination.ts`; não cria tabelas.
+5. A API devolve JSON com a página, total e dados filtrados. A Visão geral recebe agregados e oito atualizações recentes.
+6. O React mostra os resultados e solicita outra página ou busca ao servidor quando necessário.
 
 ## Fluxo de cadastro
 

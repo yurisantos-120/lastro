@@ -1,19 +1,21 @@
 import type { GlpiConfig, GlpiTicket, GlpiTicketInput, GlpiTicketDetails } from './types.ts';
 import { GlpiError, isObject } from './glpi-errors.ts';
+import { glpiTransportUrl } from './glpi-url.ts';
 export class GlpiClient {
   private readonly config: GlpiConfig;
   private readonly http: typeof fetch;
   constructor(config: GlpiConfig, http: typeof fetch = fetch) {
-    this.config = config;
+    try { this.config = { ...config, baseUrl: glpiTransportUrl(config.baseUrl, config.privateHttpHost, config.httpHost) }; }
+    catch { throw new GlpiError('GLPI_CONFIG_ERROR', 503); }
     this.http = http;
   }
   private async request(
     path: string,
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT',
     session?: string,
     body?: unknown,
   ): Promise<unknown> {
-    const ticketPost = method === 'POST' && path === 'Ticket';
+    const ticketPost = method !== 'GET';
     const timeoutMs = ticketPost
       ? this.config.ticketCreateTimeoutMs
       : this.config.timeoutMs;
@@ -49,12 +51,16 @@ export class GlpiClient {
           // Never expose upstream text.
         }
         const upstreamCode = Array.isArray(errorBody) ? errorBody[0] : undefined;
+        if (response.status === 400 && upstreamCode === 'ERROR_RANGE_EXCEED_TOTAL' && /^Ticket\/[1-9]\d*\/ITILSolution\?range=\d+-\d+$/.test(path))
+          return [];
         if (upstreamCode === 'ERROR_SESSION_TOKEN_INVALID' || upstreamCode === 'ERROR_SESSION_TOKEN_MISSING') {
           throw new GlpiError('GLPI_SESSION_ERROR', 401);
         }
         if (upstreamCode === 'ERROR_ITEM_NOT_FOUND' && path.startsWith('Ticket/')) {
           throw new GlpiError('GLPI_TICKET_NOT_FOUND', 404);
         }
+        if (response.status < 500 && upstreamCode === 'ERROR_RIGHT_MISSING')
+          throw new GlpiError('GLPI_FORBIDDEN', 403);
       }
       if (response.status === 401) throw new GlpiError(session ? 'GLPI_SESSION_ERROR' : 'GLPI_AUTH_ERROR', 401);
       if (response.status === 403) throw new GlpiError('GLPI_FORBIDDEN', 403);
@@ -88,8 +94,6 @@ export class GlpiClient {
       throw new GlpiError(
         ticketPost
           ? 'GLPI_TICKET_UNCERTAIN'
-          : method === 'POST'
-          ? 'GLPI_TICKET_CREATE_ERROR'
           : 'GLPI_CONNECTION_ERROR',
       );
     } finally {
@@ -122,6 +126,8 @@ export class GlpiClient {
     const ticket: GlpiTicketDetails = { id, title: data.name, content: data.content };
     if (typeof data.status === 'number' && Number.isInteger(data.status)) ticket.status = data.status;
     else if (typeof data.status === 'string' && /^\d+$/.test(data.status)) ticket.status = Number(data.status);
+    if (ticket.status !== undefined && (!Number.isInteger(ticket.status) || ticket.status < 1 || ticket.status > 6))
+      throw new GlpiError('GLPI_INVALID_RESPONSE');
     if (typeof data.date_creation === 'string') ticket.createdAt = data.date_creation;
     else if (typeof data.date === 'string') ticket.createdAt = data.date;
     return ticket;
@@ -143,5 +149,35 @@ export class GlpiClient {
     if (!Number.isSafeInteger(id) || id <= 0)
       throw new GlpiError('GLPI_TICKET_UNCERTAIN', 503);
     return { id };
+  }
+
+  async updateTicket(session: string, id: number, input: Record<string, unknown>): Promise<void> {
+    const data = await this.request(`Ticket/${id}`, 'PUT', session, { input: { id, ...input } });
+    // GLPI v1 replies with [{ "42": true, "message": "" }]; HTTP 200 alone is insufficient.
+    if (!Array.isArray(data) || data.length !== 1 || !isObject(data[0]) || data[0][String(id)] !== true)
+      throw new GlpiError('GLPI_TICKET_UNCERTAIN', 503);
+  }
+  async addSolution(session: string, id: number, content: string): Promise<number> {
+    const data = await this.request('ITILSolution', 'POST', session, {
+      input: { itemtype: 'Ticket', items_id: id, content },
+    });
+    const solutionId = isObject(data) ? Number(data.id) : NaN;
+    if (!Number.isSafeInteger(solutionId) || solutionId <= 0)
+      throw new GlpiError('GLPI_TICKET_UNCERTAIN', 503);
+    return solutionId;
+  }
+  async findSolution(session: string, id: number, marker: string): Promise<number | null> {
+    // Bounded, paginated read. Absence is never evidence that retrying a POST is safe.
+    let found: number | null = null;
+    for (let start = 0; start < 1000; start += 100) {
+      const data = await this.request(`Ticket/${id}/ITILSolution?range=${start}-${start + 99}`, 'GET', session);
+      if (!Array.isArray(data)) throw new GlpiError('GLPI_INVALID_RESPONSE');
+      const matches = data.filter((row) => isObject(row) && row.itemtype === 'Ticket' && Number(row.items_id) === id &&
+        typeof row.content === 'string' && row.content.includes(marker) && Number.isSafeInteger(Number(row.id)) && Number(row.id) > 0);
+      if (matches.length > 1 || matches.length && found !== null) throw new GlpiError('GLPI_INVALID_RESPONSE');
+      if (matches.length === 1) found = Number(matches[0].id);
+      if (data.length < 100) return found;
+    }
+    return null;
   }
 }

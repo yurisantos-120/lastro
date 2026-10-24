@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type SubmitEvent } from 'react';
 import { Eye, EyeOff, LoaderCircle, LockKeyhole, LogOut, Network, RefreshCw, ShieldCheck, UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Alert } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import type { AuthUser, LocalAuthRole } from '@/services/auth/auth-types';
 
@@ -221,7 +222,7 @@ function LoginScreen({ message, login, pending }: {
         </div>
         <div className="relative z-10 max-w-sm py-12">
           <div className="mb-6 h-1 w-10 rounded-full bg-[#ff6b2c]" />
-          <h1 className="text-3xl font-semibold leading-tight tracking-tight lg:text-4xl">Gestão e suporte em um mesmo lugar.</h1>
+          <h1 className="lastro-login-heading text-3xl font-semibold leading-tight tracking-tight lg:text-4xl">Gestão e suporte em um mesmo lugar.</h1>
           <p className="mt-5 text-sm leading-7 text-slate-300 lg:text-base">Documentação, infraestrutura, diagnósticos e chamados conectados em um único fluxo.</p>
         </div>
         <p className="relative z-10 text-xs text-slate-400">Eidos · Operação conectada</p>
@@ -257,8 +258,8 @@ function LoginScreen({ message, login, pending }: {
               </button>
             </span>
           </label>
-          {message && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-5 text-red-800 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-200">{message}</p>}
-          <Button type="submit" disabled={pending || !username.trim() || !password} className="h-12 w-full rounded-xl bg-[#ff6b2c] font-semibold text-[#101b2a] shadow-sm shadow-orange-900/10 transition-colors hover:bg-[#e85b20] disabled:cursor-not-allowed disabled:opacity-60">
+          {message && <Alert variant="error" className="rounded-xl px-3.5 py-3 leading-5">{message}</Alert>}
+          <Button type="submit" variant="brand" disabled={pending || !username.trim() || !password} className="h-12 w-full rounded-xl font-semibold shadow-sm shadow-orange-900/10 transition-colors disabled:cursor-not-allowed disabled:opacity-60">
             {pending ? <><LoaderCircle className="size-4 animate-spin" aria-hidden="true" />Autenticando…</> : <><ShieldCheck className="size-4" aria-hidden="true" />Entrar</>}
           </Button>
           <p className="pt-2 text-center text-xs leading-5 text-slate-500 dark:text-slate-400">Sua senha é validada pelo GLPI e não é armazenada pelo Lastro.</p>

@@ -25,7 +25,7 @@ export interface CreateTicketRequest {
 }
 
 export interface TicketRepository {
-  createPending(input: CreateTicketRequest): Promise<{ ticket: LocalTicket; inserted: boolean }>;
+  createPending(input: CreateTicketRequest): Promise<{ ticket: LocalTicket; inserted: boolean; matchesRequest?: boolean }>;
   markCreated(id: number, ticket: { id: number }): Promise<LocalTicket>;
   markFailed(id: number, failureCode: string): Promise<void>;
   markUncertain(id: number, failureCode: string, glpiTicketId?: number): Promise<LocalTicket | null>;

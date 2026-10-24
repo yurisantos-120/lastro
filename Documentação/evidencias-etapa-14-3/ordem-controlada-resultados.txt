@@ -1,0 +1,4 @@
+Reprodução com banco SQLite em memória e três conflitos esperados.
+Comando: node --experimental-strip-types --unhandled-rejections=strict <script> <caminho-absoluto-do-projeto-lastro>
+ordem-controlada-antes.mjs: exit=1, rejeição observada tardiamente.
+ordem-controlada-depois.mjs: exit=0, stdout/stderr vazios.

@@ -1,48 +1,81 @@
+import { env } from 'cloudflare:workers';
 import { getGlpiService } from '@/services/glpi/glpi-runtime';
-import { GlpiError, glpiFailure } from '@/services/glpi/glpi-errors';
 import { getTicketRepository } from '@/db/ticket-runtime';
-import { TicketStorageError } from '@/db/ticket-storage';
-import { TicketNotFoundError, TicketWorkflow } from '@/services/tickets/ticket-workflow';
+import { GlpiIntegrationRepository } from '@/db/glpi-integration';
+import { GlpiIntegrationWorkflow } from '@/services/glpi/integration-workflow';
+import { IntegrationError } from '@/services/glpi/integration';
 import { getAuthService } from '@/services/auth/auth-runtime';
 import { withRequiredRole } from '@/services/auth/api-access';
-
-async function readTicket(context: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await context.params;
-    if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id))) {
-      throw new GlpiError('GLPI_TICKET_NOT_FOUND', 400);
-    }
-    const repository = getTicketRepository();
-    const local = await repository.getByGlpiId(Number(id));
-    if (!local) throw new TicketNotFoundError();
-    let glpi;
-    try {
-      glpi = getGlpiService();
-    } catch (error) {
-      const failure = glpiFailure(error).body;
-      return Response.json(
-        { success: true, ticket: local, sync: { success: false, code: failure.code, message: failure.message } },
-        { headers: { 'Cache-Control': 'no-store' } },
-      );
-    }
-    const workflow = new TicketWorkflow(repository, glpi);
-    const result = await workflow.detail(Number(id));
-    return Response.json({ success: true, ...result }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (error) {
-    const failure = error instanceof TicketNotFoundError
-      ? { body: { success: false as const, code: 'TICKET_NOT_FOUND', message: error.message }, status: 404 }
-      : error instanceof TicketStorageError
-        ? { body: { success: false as const, code: error.code, message: error.message }, status: 503 }
-        : glpiFailure(error);
-    return Response.json(failure.body, { status: failure.status, headers: { 'Cache-Control': 'no-store' } });
-  }
-}
-
-export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+// Compatibility endpoint: id is remote, unlike /api/tickets/:id/integration.
+// Retains explicit synchronization but now journals every request.
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
   return withRequiredRole(
     request,
     'operator',
     (token) => getAuthService().currentUser(token),
-    () => readTicket(context),
+    async (user) => {
+      const json = (body: unknown, status = 200) =>
+        Response.json(body, {
+          status,
+          headers: { 'Cache-Control': 'no-store' },
+        });
+      try {
+        const { id } = await context.params;
+        if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id)))
+          throw new IntegrationError('INVALID_ID', 'ID GLPI inválido.');
+        const origin = request.headers.get('origin');
+        if (origin && origin !== new URL(request.url).origin)
+          throw new IntegrationError('ORIGIN', 'Origem não permitida.', 403);
+        const local = await getTicketRepository().getByGlpiId(Number(id));
+        if (!local)
+          throw new IntegrationError(
+            'NOT_FOUND',
+            'Chamado local não encontrado.',
+            404,
+          );
+        if (!env.DB) throw new Error('Unavailable');
+        const workflow = new GlpiIntegrationWorkflow(
+          new GlpiIntegrationRepository(env.DB),
+          getGlpiService,
+        );
+        const result = await workflow.execute(local.id, user.id, {
+          operationKey: crypto.randomUUID(),
+          action: 'sync',
+          expectedRevision: local.revision,
+        });
+        const updated = await getTicketRepository().getByLocalId(local.id);
+        return json({
+          success: true,
+          ticket: updated ?? local,
+          sync:
+            result.operation.state === 'confirmed'
+              ? { success: true }
+              : {
+                  success: false,
+                  code: result.operation.code,
+                  message:
+                    'Não foi possível confirmar a consulta. Consulte o histórico da integração.',
+                },
+        });
+      } catch (error) {
+        return json(
+          {
+            success: false,
+            code:
+              error instanceof IntegrationError
+                ? error.code
+                : 'INTEGRATION_UNAVAILABLE',
+            message:
+              error instanceof IntegrationError
+                ? error.message
+                : 'Integração indisponível. Consulte o histórico local.',
+          },
+          error instanceof IntegrationError ? error.status : 503,
+        );
+      }
+    },
   );
 }

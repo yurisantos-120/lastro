@@ -22,6 +22,7 @@ export interface AuthSessionResult {
 }
 
 export interface AuthRepository {
+  checkSessionStorage(): Promise<void>;
   findByGlpiUserId(glpiUserId: number): Promise<AuthUser | null>;
   bootstrapFirstAdmin(identity: GlpiIdentity, allowedGlpiUserId: number): Promise<AuthUser | null>;
   createSession(input: {

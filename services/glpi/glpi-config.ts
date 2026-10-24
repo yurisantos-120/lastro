@@ -1,7 +1,10 @@
 import type { GlpiConfig } from './types.ts';
 import { GlpiError } from './glpi-errors.ts';
+import { glpiHttpHost, glpiTransportUrl, privateGlpiHost } from './glpi-url.ts';
 export interface GlpiEnvironment {
   GLPI_BASE_URL?: string;
+  GLPI_PRIVATE_HTTP_HOST?: string;
+  GLPI_HTTP_HOST?: string;
   GLPI_APP_TOKEN?: string;
   GLPI_USER_TOKEN?: string;
   GLPI_API_VERSION?: string;
@@ -11,22 +14,14 @@ export interface GlpiEnvironment {
 export function readGlpiConfig(env: GlpiEnvironment): GlpiConfig {
   const invalid = () => new GlpiError('GLPI_CONFIG_ERROR', 503);
   if (env.GLPI_API_VERSION !== 'v1') throw invalid();
-  let url: URL;
+  let baseUrl: string;
+  let privateHttpHost: string | undefined;
+  let httpHost: string | undefined;
   try {
-    url = new URL(env.GLPI_BASE_URL?.trim() || '');
-  } catch {
-    throw invalid();
-  }
-  if (
-    !['http:', 'https:'].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    !/\/apirest\.php\/?$/i.test(url.pathname)
-  )
-    throw invalid();
-  if (/\/api\.php(?:\/|$)/i.test(url.pathname)) throw invalid();
+    privateHttpHost = privateGlpiHost(env.GLPI_PRIVATE_HTTP_HOST);
+    httpHost = glpiHttpHost(env.GLPI_HTTP_HOST);
+    baseUrl = glpiTransportUrl(env.GLPI_BASE_URL?.trim() || '', privateHttpHost, httpHost);
+  } catch { throw invalid(); }
   const appToken = env.GLPI_APP_TOKEN?.trim() || '';
   const userToken = env.GLPI_USER_TOKEN?.trim() || '';
   if (
@@ -46,7 +41,9 @@ export function readGlpiConfig(env: GlpiEnvironment): GlpiConfig {
   )
     throw invalid();
   return {
-    baseUrl: url.href.replace(/\/+$/, ''),
+    baseUrl,
+    privateHttpHost,
+    httpHost,
     appToken,
     userToken,
     timeoutMs,

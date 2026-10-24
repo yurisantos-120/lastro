@@ -20,13 +20,14 @@ export function getAuthService(): AuthService {
     if (error instanceof AuthStorageError) throw new AuthError('AUTH_STORAGE_UNAVAILABLE');
     throw new AuthError('AUTH_STORAGE_UNAVAILABLE');
   }
-  try {
-    return new AuthService({
-      repository,
-      glpi: new GlpiUserAuthClient(readGlpiUserAuthConfig(env)),
-      bootstrapGlpiUserId: bootstrapGlpiUserId(env.OPUSLOG_BOOTSTRAP_GLPI_USER_ID),
-    });
-  } catch {
-    throw new AuthError('AUTH_PROVIDER_UNAVAILABLE');
-  }
+  return new AuthService({
+    repository,
+    // Session reads and local guards do not depend on GLPI transport.
+    // Validate/build the external provider only for an actual login attempt.
+    glpi: {
+      authenticate: (username, password) =>
+        new GlpiUserAuthClient(readGlpiUserAuthConfig(env)).authenticate(username, password),
+    },
+    bootstrapGlpiUserId: bootstrapGlpiUserId(env.OPUSLOG_BOOTSTRAP_GLPI_USER_ID),
+  });
 }

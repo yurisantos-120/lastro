@@ -116,4 +116,3 @@ Verifique se a pasta `.wrangler` foi removida, se o projeto foi aberto a partir 
 ### Mudança no banco não foi aplicada
 
 Alterar `db/schema.ts` e reiniciar o servidor não atualiza uma tabela existente. Gere e revise uma migration e siga o procedimento local/remoto documentado em [Banco e persistência](04-Banco-e-Persistencia.md). Não aplique a migration local à base `.wrangler` já inicializada sem resolver antes o baseline de `d1_migrations`.
-

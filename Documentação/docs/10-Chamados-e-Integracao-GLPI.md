@@ -42,7 +42,7 @@ O painel **Integração GLPI — teste inicial** foi mantido recolhido no fim da
 
 ## Limitação de acesso
 
-O Lastro ainda não possui autenticação própria. Enquanto essa etapa não for implementada, a aplicação e estes endpoints precisam permanecer restritos à rede/ambiente confiável. A validação de `Origin` é apenas uma proteção complementar de navegador, nunca autenticação nem autorização.
+O Lastro usa sessão local autenticada por identidade GLPI e autorização por perfil. Abertura, consulta remota e operações de integração exigem operator/admin; associação de abertura incerta exige admin. A validação de `Origin` é complementar. Os fluxos atuais, nova migration, reconciliação e limites estão na [Implementação 5](16-Integracao-e-Reconciliacao-GLPI.md). A situação operacional, o resultado da abertura, o status oficial e o estado da integração permanecem separados.
 
 ## Homologação
 

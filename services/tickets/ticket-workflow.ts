@@ -22,6 +22,7 @@ export class TicketWorkflow {
   async create(input: unknown, createdBy: number | null = null) {
     if (
       !isObject(input) ||
+      Object.keys(input).some(key => !['operationKey','title','content'].includes(key)) ||
       typeof input.operationKey !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.operationKey)
     ) {
@@ -33,6 +34,8 @@ export class TicketWorkflow {
     const pending = await this.repository.createPending(request);
 
     if (!pending.inserted) {
+      if (!(pending.matchesRequest ?? (pending.ticket.title === ticketInput.title && pending.ticket.content === ticketInput.content && (pending.ticket.createdBy ?? null) === createdBy)))
+        throw new GlpiError('GLPI_VALIDATION_ERROR', 409);
       if (pending.ticket.resultState === 'created') {
         return { resultState: 'created' as const, ticket: pending.ticket, reused: true };
       }

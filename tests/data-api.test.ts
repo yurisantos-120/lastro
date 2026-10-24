@@ -1,14 +1,30 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DataStorageError } from '../db/data-errors.ts';
+import type { CatalogQuery } from '../db/catalog-pagination.ts';
 import type { CategoryCreateInput, CategoryUpdateInput, RecordCreateInput, RecordUpdateInput } from '../db/data-types.ts';
 import type { DataStorage } from '../app/api/data/handlers.ts';
 import { createDataHandlers } from '../app/api/data/handlers.ts';
+import type { ParsedDataPayload } from '../app/api/data/validation.ts';
+import type { DataMethod, DataReceipt } from '../services/data/operations.ts';
 
 type StoredCategory = CategoryCreateInput & { id: number; revision: number };
 type StoredRecord = RecordCreateInput & { id: number; revision: number };
 
 class MemoryStorage implements DataStorage {
+  async execute(_actorId: number, key: string, method: DataMethod, payload: ParsedDataPayload): Promise<DataReceipt> {
+    const id = method === 'POST' ? this.nextId : (payload.data as {id:number}).id;
+    if (payload.kind === 'category') {
+      if (method === 'POST') await this.createCategory(payload.data);
+      else await this.updateCategory(payload.data as CategoryUpdateInput);
+    } else {
+      if (method === 'POST') await this.createRecord(payload.data as RecordCreateInput);
+      else await this.updateRecord(payload.data as RecordUpdateInput);
+    }
+    const snapshot = (payload.kind === 'category' ? this.categories : this.records).get(id)!;
+    return {key,kind:payload.kind,method,entityId:id,revision:snapshot.revision,recordedAt:new Date().toISOString(),snapshot:{...snapshot}};
+  }
+  async recover(): Promise<DataReceipt | null> { return null; }
   readonly categories = new Map<number, StoredCategory>([
     [1, { id: 1, revision: 1, name: 'Rotas', description: 'Rotas de fibra', color: '#ff6b2c', scope: 'general' }],
     [2, { id: 2, revision: 1, name: 'VLANs', description: 'VLANs regionais', color: '#4f7cff', scope: 'vlan' }],
@@ -21,7 +37,7 @@ class MemoryStorage implements DataStorage {
   private nextId = 200;
   failReads = false;
 
-  async readAll() {
+  async read(_query: CatalogQuery) {
     if (this.failReads) throw new Error('SQL SECRET internal driver details');
     return { categories: [...this.categories.values()], records: [...this.records.values()] };
   }
@@ -62,13 +78,13 @@ class MemoryStorage implements DataStorage {
 
 function fixture() {
   const storage = new MemoryStorage();
-  return { storage, api: createDataHandlers(storage) };
+  return { storage, api: createDataHandlers(storage, 1) };
 }
 
 function post(api: ReturnType<typeof createDataHandlers>, payload: unknown) {
   return api.POST(new Request('http://local/api/data', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
     body: typeof payload === 'string' ? payload : JSON.stringify(payload),
   }));
 }
@@ -76,7 +92,7 @@ function post(api: ReturnType<typeof createDataHandlers>, payload: unknown) {
 function put(api: ReturnType<typeof createDataHandlers>, payload: unknown) {
   return api.PUT(new Request('http://local/api/data', {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
     body: typeof payload === 'string' ? payload : JSON.stringify(payload),
   }));
 }
@@ -91,9 +107,10 @@ const recordPayloads = [
 
 void test('POST accepts the current category and all four record payloads', async () => {
   const { storage, api } = fixture();
-  const categoryResult = await (await post(api, category)).json() as { categories: Array<{ name: string; revision: number }> };
-  assert.equal(categoryResult.categories.length, 5);
-  assert.equal(categoryResult.categories.find((item) => item.name === 'Regional')?.revision, 1);
+  const categoryResult = await (await post(api, category)).json() as { operation: DataReceipt };
+  assert.equal(categoryResult.operation.kind, 'category');
+  assert.equal(categoryResult.operation.snapshot.name, 'Regional');
+  assert.equal(categoryResult.operation.revision, 1);
   for (const payload of recordPayloads) {
     const response = await post(api, payload);
     assert.equal(response.status, 201);
@@ -259,12 +276,12 @@ void test('returns 404 for nonexistent category and record updates', async () =>
 void test('preserves safe error responses and does not expose internal storage details', async () => {
   const { api, storage } = fixture();
   storage.failReads = true;
-  const getResponse = await api.GET();
+  const getResponse = await api.GET(new Request('http://local/api/data?resource=records'));
   assert.equal(getResponse.status, 500);
   assert.deepEqual(await getResponse.json(), { error: 'Falha ao carregar dados.' });
   storage.failReads = false;
   storage.createCategory = async () => { throw new Error('SQL SECRET raw driver details'); };
   const response = await post(api, category);
   assert.equal(response.status, 500);
-  assert.deepEqual(await response.json(), { error: 'Falha ao salvar os dados.' });
+  assert.deepEqual(await response.json(), { error: 'Falha ao salvar os dados. Resultado não confirmado.' });
 });

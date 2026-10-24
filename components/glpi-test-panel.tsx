@@ -143,7 +143,7 @@ export function GlpiTestPanel({ request }: { request: (input: RequestInfo | URL,
           <Button
             type="submit"
             disabled={pending !== null || !title.trim() || !content.trim()}
-            className="bg-[#ff6b2c] text-white hover:bg-[#e85b20]"
+            variant="brand"
           >
             {pending === 'ticket' ? 'Criando…' : 'Criar chamado de teste'}
           </Button>

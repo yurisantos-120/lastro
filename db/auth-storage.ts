@@ -38,6 +38,15 @@ export class D1AuthRepository implements AuthRepository {
     this.db = db;
   }
 
+  async checkSessionStorage(): Promise<void> {
+    try {
+      // A missing/failed session store must not look like an anonymous session.
+      await this.db.prepare('SELECT 1 FROM sessions LIMIT 1').first();
+    } catch {
+      throw new AuthStorageError();
+    }
+  }
+
   async findByGlpiUserId(glpiUserId: number): Promise<AuthUser | null> {
     try {
       const row = await this.db.prepare(`SELECT ${userColumns} FROM users WHERE glpi_user_id = ?`)

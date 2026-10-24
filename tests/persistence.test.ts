@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import test from 'node:test';
-import { ensureDatabase, insertCategory, insertRecord, updateCategoryRow, updateRecordRow } from '../db/persistence.ts';
+import { insertCategory, insertRecord, updateCategoryRow, updateRecordRow } from './helpers/legacy-persistence.ts';
+import { queryCatalog } from '../db/catalog-pagination.ts';
 import { DataStorageError } from '../db/data-errors.ts';
+import { createDataHandlers } from '../app/api/data/handlers.ts';
+import { D1Memory } from './helpers/d1-memory.ts';
 import type { CategoryCreateInput, CategoryUpdateInput, RecordCreateInput, RecordUpdateInput } from '../db/data-types.ts';
 
 interface StatementResult {
@@ -11,14 +15,29 @@ interface StatementResult {
   results?: unknown[] | null;
 }
 
+async function readCatalog(db: D1Database) {
+  const categories = await queryCatalog(db, { resource: 'categories', page: 1, pageSize: 100, q: '' }) as { categories: unknown[] };
+  const records = await queryCatalog(db, { resource: 'records', page: 1, pageSize: 100, q: '' }) as { records: unknown[] };
+  return { categories: categories.categories, records: records.records };
+}
+
 class SqliteD1Harness {
   readonly sqlite = new DatabaseSync(':memory:');
+  readonly preparedSql: string[] = [];
   private batchTail: Promise<void> = Promise.resolve();
   private failNextBatchAt: number | null = null;
   private failOnBatchNumber: number | null = null;
   private batchNumber = 0;
 
+  constructor(migrated = true) {
+    if (!migrated) return;
+    for (const file of readdirSync('drizzle').filter((name) => /^000[0-3]_.+\.sql$/.test(name)).sort()) {
+      this.sqlite.exec(readFileSync(`drizzle/${file}`, 'utf8').replaceAll('--> statement-breakpoint', ''));
+    }
+  }
+
   prepare(sql: string) {
+    this.preparedSql.push(sql);
     let bindings: unknown[] = [];
     const statement = {
       bind: (...values: unknown[]) => {
@@ -26,7 +45,13 @@ class SqliteD1Harness {
         return statement;
       },
       run: async (): Promise<StatementResult> => {
-        const result = this.sqlite.prepare(sql).run(...(bindings as SQLInputValue[]));
+        const prepared = this.sqlite.prepare(sql);
+        if (prepared.columns().length) return {
+          success: true,
+          results: prepared.all(...(bindings as SQLInputValue[])),
+          meta: { changes: 0, last_row_id: 0 },
+        };
+        const result = prepared.run(...(bindings as SQLInputValue[]));
         return {
           success: true,
           meta: { changes: Number(result.changes), last_row_id: Number(result.lastInsertRowid) },
@@ -113,7 +138,7 @@ async function withDatabase(callback: (harness: SqliteD1Harness) => Promise<void
 }
 
 async function addGeneralFixture(db: D1Database) {
-  await ensureDatabase(db);
+  await readCatalog(db);
   const categoryId = await insertCategory(db, {
     name: 'Rotas de teste',
     description: 'Categoria criada explicitamente pelo teste',
@@ -136,7 +161,7 @@ async function addGeneralFixture(db: D1Database) {
 void test('uses native integer primary keys for rapid category and record inserts', async () => {
   await withDatabase(async (harness) => {
     const db = harness.asD1();
-    await ensureDatabase(db);
+    await readCatalog(db);
 
     const firstCategoryId = await insertCategory(db, category('VLAN A'));
     const secondCategoryId = await insertCategory(db, category('VLAN B'));
@@ -150,24 +175,26 @@ void test('uses native integer primary keys for rapid category and record insert
   });
 });
 
-void test('leaves an empty database without demonstration data on repeated initialization', async () => {
+void test('repeated catalog reads execute SELECT only and create no records', async () => {
   await withDatabase(async (harness) => {
     const db = harness.asD1();
-    await Promise.all([ensureDatabase(db), ensureDatabase(db), ensureDatabase(db)]);
-    await ensureDatabase(db);
+    await Promise.all([readCatalog(db), readCatalog(db), readCatalog(db)]);
+    await readCatalog(db);
 
     assert.equal(harness.sqlite.prepare('SELECT COUNT(*) AS total FROM categories').get()?.total, 0);
     assert.equal(harness.sqlite.prepare('SELECT COUNT(*) AS total FROM information').get()?.total, 0);
+    assert.equal(harness.preparedSql.length, 16);
+    assert.ok(harness.preparedSql.every((sql) => /^SELECT\b/.test(sql)));
   });
 });
 
-void test('leaves a populated database unchanged during initialization', async () => {
+void test('catalog reads preserve existing category and information rows', async () => {
   await withDatabase(async (harness) => {
     const db = harness.asD1();
     const { categoryId, recordId } = await addGeneralFixture(db);
     const beforeCategory = harness.sqlite.prepare('SELECT * FROM categories WHERE id = ?').get(categoryId);
     const beforeRecord = harness.sqlite.prepare('SELECT * FROM information WHERE id = ?').get(recordId);
-    await ensureDatabase(db);
+    await readCatalog(db);
 
     assert.deepEqual(harness.sqlite.prepare('SELECT * FROM categories WHERE id = ?').get(categoryId), beforeCategory);
     assert.deepEqual(harness.sqlite.prepare('SELECT * FROM information WHERE id = ?').get(recordId), beforeRecord);
@@ -176,26 +203,84 @@ void test('leaves a populated database unchanged during initialization', async (
   });
 });
 
-void test('manual category and information creation still works after initialization', async () => {
+void test('manual category and information creation still works after migrations', async () => {
   await withDatabase(async (harness) => {
     const db = harness.asD1();
-    await ensureDatabase(db);
+    await readCatalog(db);
     const categoryId = await insertCategory(db, { ...category('Categoria própria'), scope: 'general' });
     const recordId = await insertRecord(db, {
       title: 'Registro manual', categoryId, responsible: 'Operação', validation: '—', contact: '', notes: '',
       recordType: 'general', details: {},
     });
-    await ensureDatabase(db);
+    await readCatalog(db);
     assert.equal(harness.sqlite.prepare('SELECT COUNT(*) AS total FROM categories').get()?.total, 1);
     assert.equal(harness.sqlite.prepare('SELECT COUNT(*) AS total FROM information').get()?.total, 1);
     assert.equal(harness.sqlite.prepare('SELECT title FROM information WHERE id = ?').get(recordId)?.title, 'Registro manual');
   });
 });
 
+void test('GET on a missing or legacy schema returns a controlled error without creating tables or changing rows', async () => {
+  for (const legacy of [false, true]) {
+    const harness = new SqliteD1Harness(false);
+    try {
+      if (legacy) {
+        harness.sqlite.exec(readFileSync('drizzle/0000_blushing_kitty_pryde.sql', 'utf8').replaceAll('--> statement-breakpoint', ''));
+        harness.sqlite.prepare("INSERT INTO categories (id,name,description,color,created_at,updated_at) VALUES (1,'Legada','Descrição','#123456','2026-10-01','2026-10-01')").run();
+      }
+      const beforeSchema = harness.sqlite.prepare("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name").all();
+      const beforeRows = legacy ? harness.sqlite.prepare('SELECT * FROM categories').all() : [];
+      const api = createDataHandlers({
+        read: () => readCatalog(harness.asD1()),
+        execute: async () => { throw new Error('unexpected write'); },
+        recover: async () => null,
+      }, 1);
+      const response = await api.GET(new Request('http://local/api/data?resource=records'));
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), {
+        error: 'Banco de dados desatualizado. Aplique as migrations pendentes.', code: 'SCHEMA_OUTDATED',
+      });
+      assert.deepEqual(harness.sqlite.prepare("SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name").all(), beforeSchema);
+      if (legacy) assert.deepEqual(harness.sqlite.prepare('SELECT * FROM categories').all(), beforeRows);
+      assert.ok(harness.preparedSql.every((sql) => /^SELECT\b/.test(sql)));
+    } finally { harness.close(); }
+  }
+});
+
+void test('GET reads a migrated schema without DDL and preserves its records', async () => {
+  await withDatabase(async (harness) => {
+    const { categoryId, recordId } = await addGeneralFixture(harness.asD1());
+    const beforeCategory = harness.sqlite.prepare('SELECT * FROM categories WHERE id=?').get(categoryId);
+    const beforeRecord = harness.sqlite.prepare('SELECT * FROM information WHERE id=?').get(recordId);
+    harness.preparedSql.length = 0;
+    const api = createDataHandlers({
+      read: () => readCatalog(harness.asD1()),
+      execute: async () => { throw new Error('unexpected write'); },
+      recover: async () => null,
+    }, 1);
+    const response = await api.GET(new Request('http://local/api/data?resource=records'));
+    assert.equal(response.status, 200);
+    const body = await response.json() as { categories: Array<{ id: number }>; records: Array<{ id: number }> };
+    assert.deepEqual(body.categories.map((item) => item.id), [categoryId]);
+    assert.deepEqual(body.records.map((item) => item.id), [recordId]);
+    assert.equal(harness.preparedSql.length, 4);
+    assert.ok(harness.preparedSql.every((sql) => /^SELECT\b/.test(sql)));
+    assert.deepEqual(harness.sqlite.prepare('SELECT * FROM categories WHERE id=?').get(categoryId), beforeCategory);
+    assert.deepEqual(harness.sqlite.prepare('SELECT * FROM information WHERE id=?').get(recordId), beforeRecord);
+  });
+});
+
+void test('catalog reads also work on an isolated database with migrations through 0012', async () => {
+  const harness = new D1Memory();
+  try {
+    assert.deepEqual(await readCatalog(harness.asD1()), { categories: [], records: [] });
+    assert.equal(harness.sqlite.prepare('SELECT COUNT(*) AS n FROM data_operations').get()?.n, 0);
+  } finally { harness.sqlite.close(); }
+});
+
 void test('keeps category scope changes compatible with linked records', async () => {
   await withDatabase(async (harness) => {
     const db = harness.asD1();
-    await ensureDatabase(db);
+    await readCatalog(db);
     const { categoryId, recordId } = await addGeneralFixture(db);
     const update = {
       id: categoryId,
@@ -216,7 +301,7 @@ void test('keeps category scope changes compatible with linked records', async (
 void test('persists valid category and record updates', async () => {
   await withDatabase(async (harness) => {
     const db = harness.asD1();
-    await ensureDatabase(db);
+    await readCatalog(db);
     const { categoryId, recordId } = await addGeneralFixture(db);
     await updateCategoryRow(db, {
       id: categoryId,
@@ -250,7 +335,7 @@ void test('persists valid category and record updates', async () => {
 void test('starts new rows at revision 1 and rejects stale record and category updates', async () => {
   await withDatabase(async (harness) => {
     const db = harness.asD1();
-    await ensureDatabase(db);
+    await readCatalog(db);
     const categoryId = await insertCategory(db, category('VLAN C'));
     const recordId = await insertRecord(db, vlanRecord(categoryId, '103'));
     assert.equal(harness.sqlite.prepare('SELECT revision FROM categories WHERE id = ?').get(categoryId)?.revision, 1);
@@ -272,7 +357,7 @@ void test('starts new rows at revision 1 and rejects stale record and category u
 void test('persists expanded point connectivity details in details_json', async () => {
   await withDatabase(async (harness) => {
     const db = harness.asD1();
-    await ensureDatabase(db);
+    await readCatalog(db);
     const categoryId = await insertCategory(db, { ...category('Pontos técnicos'), scope: 'point' });
     const recordId = await insertRecord(db, {
       title: 'Unidade de teste', categoryId, responsible: '', validation: '—', contact: '', notes: '', recordType: 'point',
@@ -292,7 +377,7 @@ void test('persists expanded point connectivity details in details_json', async 
 void test('allows only one of two concurrent updates based on the same revision', async () => {
   await withDatabase(async (harness) => {
     const db = harness.asD1();
-    await ensureDatabase(db);
+    await readCatalog(db);
     const { categoryId, recordId } = await addGeneralFixture(db);
     const categoryBase = { id: categoryId, revision: 1, description: 'Concorrência', color: '#ff6b2c', scope: 'general' } as CategoryUpdateInput;
     const recordBase = { id: recordId, revision: 1, categoryId, responsible: 'NOC', validation: '—', contact: '', notes: '', recordType: 'general', details: {} } as RecordUpdateInput;
@@ -317,7 +402,7 @@ void test('allows only one of two concurrent updates based on the same revision'
 void test('does not persist an insert rejected by a database constraint', async () => {
   await withDatabase(async (harness) => {
     const db = harness.asD1();
-    await ensureDatabase(db);
+    await readCatalog(db);
     const invalidCategory = { ...category('Sem nome'), name: null } as unknown as CategoryCreateInput;
     await assert.rejects(insertCategory(db, invalidCategory));
     assert.equal(harness.sqlite.prepare('SELECT COUNT(*) AS total FROM categories').get()?.total, 0);
