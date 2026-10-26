@@ -515,8 +515,15 @@ export default function Home() {
           <TicketDashboard request={request} canConfirmHandoff={canOperate} actorId={user.id} onOpen={canOperate ? (id) => { setDashboardTicketId(id); navigate('chamados'); } : undefined} />
           <h2 id="knowledge-title" tabIndex={-1} className="mb-4 text-lg font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring">Base de conhecimento</h2>
           <CollectionState loading={catalogLoading} error={storageError} retry={() => setDataReload((v) => v + 1)}>
-          <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{stats.map(([label, count, Icon, color, view]) => <button key={String(label)} onClick={() => navigate(view)} className="noc-stat-card rounded-2xl p-5 text-left transition hover:-translate-y-0.5"><div className="mb-5 flex items-center justify-between"><span className="text-sm font-medium text-slate-600">{String(label)}</span><span className="grid size-9 place-items-center rounded-xl" style={{ backgroundColor: `${String(color)}18`, color: String(color) }}><Icon className="size-4" /></span></div><strong className="text-3xl font-semibold">{Number(count)}</strong></button>)}</div>
-          <RecordList title="Atualizações recentes" items={summary?.recent ?? []} onSelect={selectRecord} />
+          <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{stats.map(([label, count, Icon, color, view]) => <button key={String(label)} onClick={() => navigate(view)} className="noc-stat-card rounded-xl p-4 text-left transition hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-ring"><div className="mb-3 flex items-center justify-between"><span className="text-sm font-medium text-muted-foreground">{String(label)}</span><span className="grid size-9 place-items-center rounded-xl" style={{ backgroundColor: `${String(color)}18`, color: String(color) }}><Icon className="size-4" /></span></div><strong className="text-3xl font-semibold">{Number(count)}</strong></button>)}</div>
+          <details className="mb-7 rounded-xl border border-border bg-card p-4 text-card-foreground">
+            <summary className="cursor-pointer text-sm font-semibold focus-visible:outline-2 focus-visible:outline-ring">
+              Atualizações recentes · {summary?.recent?.length ?? 0} registros
+            </summary>
+            <div className="mt-4">
+              <RecordList title="Registros atualizados" items={summary?.recent ?? []} onSelect={selectRecord} />
+            </div>
+          </details>
           </CollectionState>
         </>}
 
