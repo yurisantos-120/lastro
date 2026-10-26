@@ -98,6 +98,11 @@ void test('pending presentation preserves observations, official/local distincti
     'Abrir detalhes',
   ])
     assert.ok(html.includes(value));
+  assert.match(html, /<summary[^>]*>Informações complementares<\/summary>/);
+  assert.match(html, /Como os indicadores são calculados/);
+  assert.match(html, /Motivo da pendência/);
+  assert.match(html, /Rompimento/);
+  assert.match(html, /Abertura registrada no Lastro/);
   assert.doesNotMatch(html, /<script>/);
   assert.match(html, /&lt;script&gt;/);
 });
