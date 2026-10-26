@@ -31,6 +31,9 @@ export const information = sqliteTable(
   (table) => [
     index('idx_information_category_id').on(table.categoryId),
     index('idx_information_title').on(table.title),
+    index('idx_information_point_municipality_key').on(table.kind, sql`json_extract(${table.detailsJson}, '$.municipalityKey')`),
+    index('idx_information_point_client_key').on(table.kind, sql`json_extract(${table.detailsJson}, '$.clientKey')`),
+    index('idx_information_point_region_key').on(table.kind, sql`json_extract(${table.detailsJson}, '$.operationalRegionKey')`),
   ],
 );
 
@@ -51,6 +54,25 @@ export const dataOperations = sqliteTable('data_operations', {
   check('data_operations_hash_check', sql`length(${table.requestHash})=64 AND ${table.requestHash} NOT GLOB '*[^0-9a-f]*'`),
   check('data_operations_response_check', sql`json_valid(${table.responseJson}) AND length(${table.responseJson})<=131072`),
 ]);
+export type DimensionKind = 'municipality' | 'client' | 'operational_region';
+export const dimensionValues = sqliteTable('dimension_values', {
+  id: text('id').primaryKey(), kind: text('kind').$type<DimensionKind>().notNull(), displayName: text('display_name').notNull(), normalizedKey: text('normalized_key').notNull(), stateCode: text('state_code'), status: text('status').$type<'approved'|'retired'>().notNull().default('approved'), revision: integer('revision').notNull().default(1), createdBy: integer('created_by').notNull().references(() => users.id, {onDelete:'restrict'}), createdAt: text('created_at').notNull(), updatedBy: integer('updated_by').notNull().references(() => users.id, {onDelete:'restrict'}), updatedAt: text('updated_at').notNull(),
+}, table=>[index('idx_dimension_values_kind_name').on(table.kind,table.normalizedKey)]);
+export const dimensionNameKeys = sqliteTable('dimension_name_keys', {
+  kind:text('kind').$type<DimensionKind>().notNull(),normalizedKey:text('normalized_key').notNull(),valueId:text('value_id').notNull().references(()=>dimensionValues.id,{onDelete:'restrict'}),aliasId:text('alias_id'),createdAt:text('created_at').notNull(),
+},table=>[uniqueIndex('idx_dimension_name_keys_identity').on(table.kind,table.normalizedKey)]);
+export const dimensionAliases = sqliteTable('dimension_aliases', {
+  id:text('id').primaryKey(),valueId:text('value_id').notNull().references(()=>dimensionValues.id,{onDelete:'restrict'}),displayName:text('display_name').notNull(),normalizedKey:text('normalized_key').notNull(),status:text('status').$type<'approved'|'retired'>().notNull().default('approved'),revision:integer('revision').notNull().default(1),createdBy:integer('created_by').notNull().references(()=>users.id,{onDelete:'restrict'}),createdAt:text('created_at').notNull(),updatedBy:integer('updated_by').notNull().references(()=>users.id,{onDelete:'restrict'}),updatedAt:text('updated_at').notNull(),
+},table=>[index('idx_dimension_aliases_value').on(table.valueId,table.status)]);
+export const dimensionRequests = sqliteTable('dimension_requests', {
+  id:text('id').primaryKey(),kind:text('kind').$type<DimensionKind>().notNull(),proposedName:text('proposed_name').notNull(),normalizedKey:text('normalized_key').notNull(),stateCode:text('state_code'),justification:text('justification').notNull(),status:text('status').$type<'submitted'|'approved'|'rejected'|'withdrawn'>().notNull(),requesterId:integer('requester_id').notNull().references(()=>users.id,{onDelete:'restrict'}),submittedAt:text('submitted_at').notNull(),decidedBy:integer('decided_by').references(()=>users.id,{onDelete:'restrict'}),decidedAt:text('decided_at'),decisionReason:text('decision_reason').notNull().default(''),valueId:text('value_id').references(()=>dimensionValues.id,{onDelete:'restrict'}),revision:integer('revision').notNull().default(1),
+},table=>[index('idx_dimension_requests_requester').on(table.requesterId,table.submittedAt),index('idx_dimension_requests_status').on(table.status,table.submittedAt)]);
+export const dimensionRequestEvents = sqliteTable('dimension_request_events', {
+  id:integer('id').primaryKey(),requestId:text('request_id').notNull().references(()=>dimensionRequests.id,{onDelete:'restrict'}),eventType:text('event_type').notNull(),actorId:integer('actor_id').notNull().references(()=>users.id,{onDelete:'restrict'}),recordedAt:text('recorded_at').notNull(),revision:integer('revision').notNull(),description:text('description').notNull().default(''),snapshotJson:text('snapshot_json').notNull(),
+},table=>[uniqueIndex('idx_dimension_request_events_revision').on(table.requestId,table.revision),index('idx_dimension_request_events_history').on(table.requestId,table.recordedAt)]);
+export const dimensionOperations = sqliteTable('dimension_operations', {
+  operationKey:text('operation_key').primaryKey(),actorId:integer('actor_id').notNull().references(()=>users.id,{onDelete:'restrict'}),requestHash:text('request_hash').notNull(),responseJson:text('response_json').notNull(),recordedAt:text('recorded_at').notNull(),
+},table=>[index('idx_dimension_operations_actor_time').on(table.actorId,table.recordedAt)]);
 export type UserRole = 'viewer' | 'operator' | 'admin';
 
 export const users = sqliteTable(

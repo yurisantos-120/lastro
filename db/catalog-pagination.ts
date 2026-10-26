@@ -1,9 +1,11 @@
 import { DataStorageError } from './data-errors.ts';
 import { recordKinds, type RecordDetails, type RecordKind } from './data-types.ts';
+import { pointDimensionFields, pointDimensionKey, type PointDimensionField } from '../lib/point-dimensions.ts';
+import { containsSensitiveText } from '../lib/sensitive-text.ts';
 
 export type CatalogKind = RecordKind;
 export type CatalogQuery =
-  | { resource: 'records'; page: number; pageSize: number; q: string; kind?: CatalogKind; categoryId?: number }
+  | { resource: 'records'; page: number; pageSize: number; q: string; kind?: CatalogKind; categoryId?: number; municipality?: string; client?: string; operationalRegion?: string }
   | { resource: 'routes'; page: number; pageSize: number; q: string; kind: 'general' }
   | { resource: 'categories'; page: number; pageSize: number; q: string; scope?: CatalogKind }
   | { resource: 'summary' }
@@ -16,7 +18,7 @@ export class CatalogQueryError extends Error {
 
 const kinds = new Set<CatalogKind>(recordKinds);
 const allowed: Record<CatalogQuery['resource'], Set<string>> = {
-  records: new Set(['resource', 'page', 'pageSize', 'q', 'kind', 'categoryId']),
+  records: new Set(['resource', 'page', 'pageSize', 'q', 'kind', 'categoryId', ...pointDimensionFields]),
   routes: new Set(['resource', 'page', 'pageSize', 'q']),
   categories: new Set(['resource', 'page', 'pageSize', 'q', 'scope']),
   summary: new Set(['resource']),
@@ -38,6 +40,16 @@ function kind(value: string | null): CatalogKind | undefined {
   return value as CatalogKind;
 }
 
+function dimensionFilter(value: string | null): string | undefined {
+  if (value === null) return undefined;
+  for (const letter of value) { const code = letter.codePointAt(0)!; if (code < 32 || code === 127) throw new CatalogQueryError('Filtro de ponto inválido.'); }
+  const label = value.trim().replace(/\s+/g, ' ');
+  if (!label || label.length > 160 || containsSensitiveText(label) || /[@:\\]|https?:|(?:\d{1,3}\.){3}\d{1,3}/i.test(label) || (label.match(/\d/g)?.length ?? 0) >= 9) {
+    throw new CatalogQueryError('Filtro de ponto inválido.');
+  }
+  return pointDimensionKey(label);
+}
+
 export function parseCatalogQuery(params: URLSearchParams): CatalogQuery {
   const resource = params.get('resource') as CatalogQuery['resource'] | null;
   if (!resource || !Object.hasOwn(allowed, resource)) throw new CatalogQueryError('Informe uma consulta cadastral válida.');
@@ -56,7 +68,10 @@ export function parseCatalogQuery(params: URLSearchParams): CatalogQuery {
   }
   if (resource === 'categories') return { resource, page, pageSize, q, scope: kind(params.get('scope')) };
   if (resource === 'routes') return { resource, page, pageSize, q, kind: 'general' };
-  return { resource, page, pageSize, q, kind: kind(params.get('kind')), categoryId: params.has('categoryId') ? integer(params.get('categoryId'), 0, Number.MAX_SAFE_INTEGER) : undefined };
+  const recordKind = kind(params.get('kind'));
+  const dimensions = Object.fromEntries(pointDimensionFields.map((field) => [field, dimensionFilter(params.get(field))])) as Partial<Record<PointDimensionField, string>>;
+  if (pointDimensionFields.some((field) => dimensions[field]) && recordKind !== 'point') throw new CatalogQueryError('Filtros de município, cliente e região exigem kind=point.');
+  return { resource, page, pageSize, q, kind: recordKind, categoryId: params.has('categoryId') ? integer(params.get('categoryId'), 0, Number.MAX_SAFE_INTEGER) : undefined, ...dimensions };
 }
 
 function missingSchema(error: unknown): boolean {
@@ -140,6 +155,14 @@ export async function queryCatalog(db: D1Database, query: CatalogQuery) {
     const binds: (string | number)[] = [];
     if (query.kind) { conditions.push('i.kind=?'); binds.push(query.kind); }
     if (query.resource === 'records' && query.categoryId) { conditions.push('i.category_id=?'); binds.push(query.categoryId); }
+    if (query.resource === 'records') for (const field of pointDimensionFields) {
+      const value = query[field];
+      if (value) {
+        const storedKey = `json_extract(i.details_json, '$.${field}Key')`;
+        conditions.push(`${storedKey} >= ? AND ${storedKey} < ?`);
+        binds.push(value, `${value}\u{10ffff}`);
+      }
+    }
     if (query.q) {
       const text = query.resource === 'routes'
         ? "coalesce(i.title,'')"

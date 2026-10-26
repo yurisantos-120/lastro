@@ -45,6 +45,14 @@ Este diretório contém o manual técnico e operacional do sistema desenvolvido 
 39. [Fichas iniciais e modelo de decisões de dados](docs/39-Fichas-Iniciais-de-Revisao-de-Dados.md)
 40. [Avaliações preliminares do Lote 01](docs/40-Avaliacoes-Preliminares-Lote-01.md)
 41. [Conferência técnica do Lote 01](docs/41-Conferencia-Tecnica-Lote-01.md)
+42. [Resolução pendente das divergências do Lote 01](docs/42-Resolucao-Divergencias-Lote-01.md)
+43. [Decisões D01–D04 e organização dos pontos atendidos](docs/43-Decisoes-D01-D04-e-Organizacao-de-Pontos.md)
+44. [Organização multidimensional dos pontos atendidos](docs/44-Organizacao-Multidimensional-Pontos.md)
+45. [Prontidão para ativação controlada da migration 0013](docs/45-Prontidao-Ativacao-Controlada-0013.md)
+46. [Ativação controlada da migration 0013](docs/46-Ativacao-Controlada-0013.md)
+47. [Política de padronização das dimensões de pontos](docs/47-Politica-de-Padronizacao-das-Dimensoes-de-Pontos.md)
+48. [Governança das dimensões de pontos](docs/48-Governanca-das-Dimensoes-de-Pontos.md)
+49. [Implementação inicial da governança das dimensões](docs/49-Implementacao-Inicial-Governanca-Dimensoes.md)
 
 ## Resumo para começar
 

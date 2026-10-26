@@ -27,7 +27,7 @@ async function list<T>(h: D1Memory, input: string): Promise<Page<T>> {
   return await queryCatalog(h.asD1(), parseCatalogQuery(new URLSearchParams(input))) as Page<T>;
 }
 
-void test('first, middle and last pages have stable order, bounds and totals on migration 0012', async () => {
+void test('first, middle and last pages have stable order, bounds and totals on current migrations', async () => {
   const h = fixture();
   try {
     const sql: string[] = [];

@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Alert, AlertStatus } from '@/components/ui/alert';
 import { CollectionState } from '@/components/collection-state';
 import { CatalogCategoryPicker } from '@/components/catalog-category-picker';
+import { PointDimensionFilters, emptyPointFilters, type PointFilterValues } from '@/components/point-dimension-filters';
 import { PreservedForm, useSubmissionDisabled } from '@/components/preserved-form';
 import { confirmedDataReceipt, normalizedDataPayload, readDataIntents, removeDataIntent, saveDataIntent, type DataIntent } from '@/lib/data-intents';
 import { FormSubmissionError as DataApiError } from '@/lib/form-submission';
@@ -21,6 +22,7 @@ import { TicketDashboard } from '@/components/ticket-dashboard';
 import { UserSession, useAuth } from '@/components/auth-provider';
 import { canOperateTickets, canTestGlpi, canWriteData } from '@/lib/auth-ui';
 import type { RecordDetails, RecordKind } from '@/db/data-types';
+import { pointDimensionFields, type PointDimensionField } from '@/lib/point-dimensions';
 
 type ActiveView = 'inicio' | 'pesquisa' | 'informacoes' | 'vlans' | 'cameras' | 'pontos' | 'categorias' | 'chamados';
 type Category = { id: number; name: string; description: string; color: string; scope: RecordKind; revision: number; recordCount?: number };
@@ -61,7 +63,7 @@ const scopeHelp: Record<RecordKind, string> = {
   general: 'Categoria ou subtipo da rota operacional',
   vlan: 'Região ou agrupamento das VLANs',
   camera: 'Responsável pelas câmeras',
-  point: 'Empresa ou cliente atendido',
+  point: 'Agrupamento do ponto; município, cliente e região são campos separados',
 };
 
 function value(formData: FormData, key: string) {
@@ -87,6 +89,8 @@ export default function Home() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
+  const [pointFilters, setPointFilters] = useState<PointFilterValues>(emptyPointFilters);
+  const [appliedPointFilters, setAppliedPointFilters] = useState<PointFilterValues>(emptyPointFilters);
   const [catalogPage, setCatalogPage] = useState<CatalogPage>({ total: 0, page: 1, pageSize: 20, pages: 0 });
   const [summary, setSummary] = useState<CatalogSummary | null>(null);
   const [loadedCatalogKey, setLoadedCatalogKey] = useState('');
@@ -231,7 +235,8 @@ export default function Home() {
 
   useEffect(() => { const timer = setTimeout(() => setAppliedQuery(query), 250); return () => clearTimeout(timer); }, [query]);
   useEffect(() => { const timer = setTimeout(() => setAppliedCategoryQuery(categoryQuery), 250); return () => clearTimeout(timer); }, [categoryQuery]);
-  const catalogKey = `${active}|${appliedQuery}|${appliedCategoryQuery}|${searchKind}|${categoryFilter ?? ''}|${page}|${pageSize}|${dataReload}`;
+  useEffect(() => { const timer = setTimeout(() => setAppliedPointFilters(pointFilters), 250); return () => clearTimeout(timer); }, [pointFilters]);
+  const catalogKey = `${active}|${appliedQuery}|${appliedCategoryQuery}|${searchKind}|${categoryFilter ?? ''}|${Object.values(appliedPointFilters).join('|')}|${page}|${pageSize}|${dataReload}`;
   const catalogLoading = dataLoading || loadedCatalogKey !== catalogKey;
   useEffect(() => {
     const resource = active === 'inicio' ? 'summary' : active === 'categorias' ? 'categories'
@@ -246,6 +251,9 @@ export default function Home() {
         if (resource !== 'summary') params.set('q', resource === 'categories' ? appliedCategoryQuery : appliedQuery);
         if (resource === 'records' && (activeKind[active] || searchKind)) params.set('kind', activeKind[active] || searchKind);
         if (resource === 'records' && categoryFilter) params.set('categoryId', String(categoryFilter));
+        if (resource === 'records' && active === 'pontos') for (const field of pointDimensionFields) {
+          if (appliedPointFilters[field]) params.set(field, appliedPointFilters[field]);
+        }
         const response = await request(`/api/data?${params}`, { cache: 'no-store', signal: controller.signal });
         if (!response.ok) throw new Error('Não foi possível atualizar a listagem cadastral. Use Tentar novamente.');
         const data = await response.json() as Partial<CatalogSummary & CatalogPage> & { categories?: Category[]; records?: RecordItem[] };
@@ -261,7 +269,7 @@ export default function Home() {
     }
     void loadData();
     return () => controller.abort();
-  }, [request, catalogKey, active, appliedQuery, appliedCategoryQuery, searchKind, categoryFilter, page, pageSize]);
+  }, [request, catalogKey, active, appliedQuery, appliedCategoryQuery, searchKind, categoryFilter, appliedPointFilters, page, pageSize]);
 
   async function persist(method: 'POST' | 'PUT', raw: Record<string, unknown>, fields:FormData) {
     setConfirmedDataMessage('');
@@ -361,7 +369,7 @@ export default function Home() {
     const fields: Record<RecordKind, string[]> = {
       general: [], vlan: ['vlanNumber', 'neighborhood'],
       camera: ['camera', 'alternateIdentifier', 'neighborhood', 'address', 'reference', 'geolocation', 'olt', 'description', 'signal', 'serialNumber', 'ipAddress', 'tunnelIp', 'eoipId', 'onuIdentifier', 'vlanNumber', 'macAddress'],
-      point: ['location', 'address', 'speed', 'date', 'partner', 'ip', 'provider', 'dhcpInternal', 'onu', 'onuIdentifier', 'olt', 'macAddress', 'connectionPort', 'opticalSignal', 'activationDate', 'installationTechnician'],
+      point: ['location', 'address', 'speed', 'date', 'partner', 'ip', 'provider', 'dhcpInternal', 'onu', 'onuIdentifier', 'olt', 'macAddress', 'connectionPort', 'opticalSignal', 'activationDate', 'installationTechnician', ...pointDimensionFields],
     };
     for (const field of fields[kind]) details[field] = value(formData, field);
     const title = kind === 'vlan' ? `VLAN ${details.vlanNumber} — ${details.neighborhood}`
@@ -517,6 +525,7 @@ export default function Home() {
             <div>{active === 'pesquisa' && <label className="mb-3 block text-sm">Tipo de cadastro<select value={searchKind} onChange={(event) => { setSearchKind(event.target.value as RecordKind | ''); setCategoryFilter(null); setPage(1); }} className="mt-1 block h-9 w-full rounded-lg border border-slate-200 bg-white px-3"><option value="">Todos os tipos</option>{Object.entries(kindLabels).map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>}<p className="mb-1 text-sm font-medium">Filtrar por categoria</p><CatalogCategoryPicker key={activeKind[active] || searchKind || 'all'} request={request} scope={activeKind[active] || searchKind || undefined} value={categoryFilter} onChange={(id) => { setCategoryFilter(id); setPage(1); }} /></div>
             <label className="text-sm">Por página<select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }} className="mt-1 block h-9 rounded-lg border border-slate-200 bg-white px-3"><option value={20}>20</option><option value={50}>50</option><option value={100}>100</option></select></label>
           </div>
+          {active === 'pontos' && <PointDimensionFilters values={pointFilters} onChange={(field: PointDimensionField, next) => { setPointFilters((current) => ({ ...current, [field]: next })); setPage(1); }} />}
           <Button type="button" variant="outline" size="sm" className="mb-3" onClick={() => setDataReload((value) => value + 1)}>Atualizar lista</Button>
           <CollectionState loading={catalogLoading} error={storageError} retry={() => setDataReload((v) => v + 1)}><RecordList title={appliedQuery ? `${catalogPage.total} resultado(s) para “${appliedQuery}”` : title[active]} items={records} total={catalogPage.total} onSelect={selectRecord} /></CollectionState>
           {!catalogLoading && !storageError && <CatalogPager page={page} pages={catalogPage.pages} total={catalogPage.total} onPage={setPage} label={active === 'categorias' ? 'categorias' : 'registros'} />}
@@ -603,6 +612,10 @@ function RecordForm({ resume, kind, request, record, action, close, conflict, re
       <FormSection title="Identificação">
         <div className="grid gap-4 sm:grid-cols-2"><Field label="Local"><Input name="location" required defaultValue={record?.details.location} /></Field><Field label="Empresa / parceiro"><Input name="partner" required defaultValue={record?.details.partner} /></Field><Field label="Provedor de internet"><Input name="provider" defaultValue={record?.details.provider} /></Field></div>
       </FormSection>
+      <FormSection title="Organização do ponto">
+        <p className="text-xs text-slate-500">Preencha somente nomes institucionais verificados. Não use contatos, endereços de rede ou credenciais.</p>
+        <div className="grid gap-4 sm:grid-cols-2"><Field label="Município"><Input name="municipality" maxLength={160} defaultValue={record?.details.municipality} /></Field><Field label="Cliente atendido"><Input name="client" maxLength={160} defaultValue={record?.details.client} /></Field><Field label="Região operacional"><Input name="operationalRegion" maxLength={160} defaultValue={record?.details.operationalRegion} /></Field></div>
+      </FormSection>
       <FormSection title="Localização">
         <Field label="Endereço"><Input name="address" required defaultValue={record?.details.address} /></Field>
       </FormSection>
@@ -629,9 +642,10 @@ function RecordDetails({ record, canEdit, close, edit }: { record: RecordItem; c
     provider: 'Provedor de internet', ip: 'IP', dhcpInternal: 'DHCP interno', onu: 'ONU / modelo', onuIdentifier: 'Identificador da ONU',
     macAddress: 'Endereço MAC', connectionPort: 'Porta de conexão', opticalSignal: 'Sinal óptico', activationDate: 'Data de ativação',
     installationTechnician: 'Técnico da instalação', ipAddress: 'IP da câmera', tunnelIp: 'IP do túnel', eoipId: 'Identificador EOIP',
+    municipality: 'Município', client: 'Cliente atendido', operationalRegion: 'Região operacional',
   };
   const general = record.kind === 'general' ? [['Responsável', record.responsible], ['Validação / designação', record.validation], ['Contato', record.contact], ['Observações', record.notes]] : [];
-  return <div><FormTitle title={record.title} subtitle={`${kindLabels[record.kind]} · ${record.categoryName || 'Sem categoria'}`} /><dl className="mt-6 grid gap-4 sm:grid-cols-2">{[...general, ...Object.entries(record.details || {}).map(([key, item]) => [detailLabels[key] || key, item])].filter(([, item]) => item).map(([label, item]) => <div key={label}><dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt><dd className="mt-1 break-words text-sm">{item}</dd></div>)}</dl><div className="lastro-form-actions mt-6 flex justify-end gap-2"><Button variant="outline" onClick={close}>Fechar</Button>{canEdit && <Button onClick={edit}>Editar cadastro</Button>}</div></div>;
+  return <div><FormTitle title={record.title} subtitle={`${kindLabels[record.kind]} · ${record.categoryName || 'Sem categoria'}`} /><dl className="mt-6 grid gap-4 sm:grid-cols-2">{[...general, ...Object.entries(record.details || {}).filter(([key]) => !key.endsWith('Key')).map(([key, item]) => [detailLabels[key] || key, item])].filter(([, item]) => item).map(([label, item]) => <div key={label}><dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt><dd className="mt-1 break-words text-sm">{item}</dd></div>)}</dl><div className="lastro-form-actions mt-6 flex justify-end gap-2"><Button variant="outline" onClick={close}>Fechar</Button>{canEdit && <Button onClick={edit}>Editar cadastro</Button>}</div></div>;
 }
 
 function TextArea(props: React.ComponentProps<'textarea'>) { return <Textarea rows={3} {...props} />; }

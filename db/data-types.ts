@@ -28,6 +28,12 @@ export interface RecordDetails {
   opticalSignal?: string;
   activationDate?: string;
   installationTechnician?: string;
+  municipality?: string;
+  client?: string;
+  operationalRegion?: string;
+  municipalityKey?: string;
+  clientKey?: string;
+  operationalRegionKey?: string;
   ipAddress?: string;
   tunnelIp?: string;
   eoipId?: string;

@@ -2,6 +2,17 @@ import type { ParsedDataPayload } from '../app/api/data/validation.ts';
 import type { CategoryUpdateInput, RecordCreateInput, RecordUpdateInput } from './data-types.ts';
 import type { DataMethod } from '../services/data/operations.ts';
 import { DataStorageError } from './data-errors.ts';
+import { pointDimensionFields, pointDimensionKey } from '../lib/point-dimensions.ts';
+
+function storedDetails(data: RecordCreateInput): string {
+  if (data.recordType !== 'point') return JSON.stringify(data.details);
+  const details = { ...data.details };
+  for (const field of pointDimensionFields) {
+    const label = details[field] ?? '';
+    if (label) details[`${field}Key`] = pointDimensionKey(label);
+  }
+  return JSON.stringify(details);
+}
 
 export function dataWrite(db: D1Database, method: DataMethod, payload: ParsedDataPayload, now: string, actorId?: number, reservedKey?: string): D1PreparedStatement {
   const gate = (actorId === undefined ? '1' : "EXISTS(SELECT 1 FROM users WHERE id=? AND active=1 AND role IN ('operator','admin'))") + (reservedKey ? " AND EXISTS(SELECT 1 FROM data_operations WHERE operation_key=? AND response_json='null')" : '');
@@ -14,8 +25,8 @@ export function dataWrite(db: D1Database, method: DataMethod, payload: ParsedDat
   }
   const d = payload.data as RecordUpdateInput;
   return method === 'POST'
-    ? db.prepare(`INSERT INTO information(title,category_id,responsible,validation,contact,notes,kind,details_json,updated_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM categories WHERE id=? AND scope=?) AND ${gate}`).bind(d.title,d.categoryId,d.responsible,d.validation,d.contact,d.notes,d.recordType,JSON.stringify(d.details),now,d.categoryId,d.recordType,...actor)
-    : db.prepare(`UPDATE information SET title=?,category_id=?,responsible=?,validation=?,contact=?,notes=?,kind=?,details_json=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=? AND EXISTS(SELECT 1 FROM categories WHERE id=? AND scope=?) AND ${gate}`).bind(d.title,d.categoryId,d.responsible,d.validation,d.contact,d.notes,d.recordType,JSON.stringify(d.details),now,d.id,d.revision,d.categoryId,d.recordType,...actor);
+    ? db.prepare(`INSERT INTO information(title,category_id,responsible,validation,contact,notes,kind,details_json,updated_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM categories WHERE id=? AND scope=?) AND ${gate}`).bind(d.title,d.categoryId,d.responsible,d.validation,d.contact,d.notes,d.recordType,storedDetails(d),now,d.categoryId,d.recordType,...actor)
+    : db.prepare(`UPDATE information SET title=?,category_id=?,responsible=?,validation=?,contact=?,notes=?,kind=?,details_json=?,updated_at=?,revision=revision+1 WHERE id=? AND revision=? AND EXISTS(SELECT 1 FROM categories WHERE id=? AND scope=?) AND ${gate}`).bind(d.title,d.categoryId,d.responsible,d.validation,d.contact,d.notes,d.recordType,storedDetails(d),now,d.id,d.revision,d.categoryId,d.recordType,...actor);
 }
 
 // Used only after a failed conditional write; never mutates to diagnose an error.

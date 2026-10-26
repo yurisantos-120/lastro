@@ -1,4 +1,6 @@
 import { recordKinds, type CategoryCreateInput, type CategoryUpdateInput, type RecordCreateInput, type RecordUpdateInput, type RecordDetails, type RecordKind } from '../../../db/data-types.ts';
+import { pointDimensionFields } from '../../../lib/point-dimensions.ts';
+import { containsSensitiveText } from '../../../lib/sensitive-text.ts';
 
 export const MAX_REQUEST_BYTES = 64 * 1024;
 
@@ -33,7 +35,7 @@ const detailLimits: Record<RecordKind, Record<string, number>> = {
     location: 240, address: 500, speed: 120, date: 10, partner: 240, ip: 45,
     provider: 240, dhcpInternal: 160, onu: 160, onuIdentifier: 160, olt: 200,
     macAddress: 17, connectionPort: 120, opticalSignal: 32, activationDate: 10,
-    installationTechnician: 240,
+    installationTechnician: 240, municipality: 160, client: 160, operationalRegion: 160,
   },
 };
 const requiredDetails: Record<RecordKind, string[]> = {
@@ -123,6 +125,18 @@ function parseDetails(value: unknown, kind: RecordKind): RecordDetails {
     else if (key === 'opticalSignal' && field && !/^[+-]?\d{1,3}(?:[.,]\d{1,2})?\s*(?:dBm)?$/i.test(field)) {
       throw new DataValidationError('details.opticalSignal deve ser um valor numérico opcionalmente seguido de dBm.');
     } else result[key] = field;
+  }
+  if (kind === 'point') for (const key of pointDimensionFields) {
+    const label = result[key] ?? '';
+    let invalidControl = false;
+    for (const letter of label) { const code = letter.codePointAt(0)!; if (code < 32 || code === 127) invalidControl = true; }
+    if (label && (invalidControl || containsSensitiveText(label) || /[@:\\]|https?:|(?:\d{1,3}\.){3}\d{1,3}/i.test(label) || (label.match(/\d/g)?.length ?? 0) >= 9)) {
+      throw new DataValidationError(`details.${key} deve conter apenas um nome de organização ou local, sem contato, endereço de rede ou credencial.`);
+    }
+    if (label && !/^[\p{L}\p{M}\p{N} .,'&()/-]+$/u.test(label)) {
+      throw new DataValidationError(`details.${key} contém caracteres não permitidos.`);
+    }
+    result[key] = label.replace(/\s+/g, ' ');
   }
   return result;
 }
