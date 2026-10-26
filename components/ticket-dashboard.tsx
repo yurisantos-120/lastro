@@ -158,11 +158,16 @@ export function DashboardResults({
           </div>
         ))}
       </div>
-      <p className="text-sm text-muted-foreground">
-        Indicadores dos filtros aplicados, em todas as páginas. Ativos reúne Em
-        tratamento, Pendente e confirmados sem acompanhamento cujo último status
-        GLPI não seja Fechado. Normalizados ficam separados.
-      </p>
+      <details className="rounded-lg border border-border/70 px-3 py-2 text-sm text-muted-foreground">
+        <summary className="cursor-pointer font-medium text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+          Como os indicadores são calculados
+        </summary>
+        <p className="mt-2">
+          Indicadores dos filtros aplicados, em todas as páginas. Ativos reúne Em
+          tratamento, Pendente e confirmados sem acompanhamento cujo último status
+          GLPI não seja Fechado. Normalizados ficam separados.
+        </p>
+      </details>
       <p className="text-sm text-muted-foreground">
         {data.counts.confirmed} abertura(s) confirmada(s) ·{' '}
         {data.counts.unconfirmed} tentativa(s) sem confirmação, fora dos
@@ -246,20 +251,30 @@ export function DashboardResults({
                         : (officialLabels[item.glpiStatus] ??
                           `Status ${item.glpiStatus}`)}
                     </p>
-                    <p className="mt-2 break-words text-sm">
-                      {item.occurrenceType || 'Tipo não informado'} ·{' '}
-                      {item.routeDescription ||
-                        item.routeTitle ||
-                        'Trecho não informado'}{' '}
-                      ·{' '}
-                      {item.responsibleOrganization ||
-                        'Empresa / gerência não informada'}
+                    <p className="mt-2 break-words text-sm text-muted-foreground">
+                      {item.routeDescription || item.routeTitle || 'Trecho não informado'}
                     </p>
-                    {item.routeTitle && item.routeDescription && (
-                      <p className="text-sm">
-                        Rota vinculada explicitamente: {item.routeTitle}
-                      </p>
-                    )}
+                    <details className="mt-3 rounded-lg border border-border/70 px-3 py-2 text-sm">
+                      <summary className="cursor-pointer font-medium text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+                        Informações complementares
+                      </summary>
+                      <div className="mt-3 space-y-2 text-muted-foreground">
+                        <p>
+                          <b className="text-foreground">Tipo de ocorrência:</b>{' '}
+                          {item.occurrenceType || 'Tipo não informado'}
+                        </p>
+                        <p>
+                          <b className="text-foreground">Empresa / gerência:</b>{' '}
+                          {item.responsibleOrganization || 'Não informada'}
+                        </p>
+                        {item.routeTitle && item.routeDescription && (
+                          <p>Rota vinculada explicitamente: {item.routeTitle}</p>
+                        )}
+                        <p>Abertura registrada no Lastro: {date(item.openedAt, data.timeZone)}</p>
+                        <p>Última movimentação: {date(item.updatedAt, data.timeZone)}</p>
+                        <p>Última sincronização GLPI: {date(item.lastSyncedAt, data.timeZone)}</p>
+                      </div>
+                    </details>
                     {item.state === 'pending' && (
                       <div className="mt-3 space-y-2 rounded-lg border border-border p-3 text-sm">
                         <p className="whitespace-pre-wrap break-words">
@@ -276,20 +291,7 @@ export function DashboardResults({
                         )}
                       </div>
                     )}
-                    <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                      <p>
-                        Abertura registrada no Lastro:{' '}
-                        {date(item.openedAt, data.timeZone)}
-                      </p>
-                      <p>
-                        Última movimentação:{' '}
-                        {date(item.updatedAt, data.timeZone)}
-                      </p>
-                      <p>
-                        Última sincronização GLPI:{' '}
-                        {date(item.lastSyncedAt, data.timeZone)}
-                      </p>
-                    </div>
+
                   </li>
                 ))}
               </ul>
